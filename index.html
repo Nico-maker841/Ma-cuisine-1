@@ -3,83 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Kitchen Pro - IA & Anti-Gaspi</title>
+    <title>Smart Kitchen Ultimate</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         :root { --urgent: #ff7675; --warning: #ffa502; --fresh: #2ed573; --primary: #6c5ce7; }
-        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #f0f2f5; padding: 10px; color: #333; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #f0f2f5; padding: 10px; color: #333; margin: 0; }
         .container { max-width: 450px; margin: auto; background: white; padding: 15px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         
-        /* Alertes */
-        #priorityAlert { display: none; background: var(--urgent); color: white; padding: 10px; border-radius: 12px; margin-bottom: 15px; font-weight: bold; animation: pulse 2s infinite; }
-        @keyframes pulse { 0% {opacity: 1;} 50% {opacity: 0.8;} 100% {opacity: 1;} }
-
+        #priorityAlert { display: none; background: var(--urgent); color: white; padding: 10px; border-radius: 12px; margin-bottom: 15px; font-weight: bold; }
         #reader { width: 100%; border-radius: 15px; overflow: hidden; background: #000; }
-        .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin: 5px 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin: 5px 0; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; }
         .btn-ai { background: var(--primary); color: white; }
         .btn-nfc { background: #1877f2; color: white; font-size: 16px; }
-        .btn-file { background: #00b894; color: white; font-size: 13px; }
-        .btn-quick { width: 22%; font-size: 11px; padding: 10px 5px; background: #e0e0e0; }
+        .btn-voice { background: #00cec9; color: white; }
+        .btn-photo { background: #fab1a0; color: #333; }
+        .btn-share { background: #25D366; color: white; margin-top: 10px; }
 
+        .input-group { display: flex; gap: 5px; align-items: center; }
         input { width: 100%; padding: 12px; margin: 8px 0; border: 2px solid #ddd; border-radius: 10px; box-sizing: border-box; }
         
-        /* Liste items */
-        .item { display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 8px; border-radius: 10px; background: white; border-left: 6px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .item { display: flex; align-items: center; padding: 10px; margin-bottom: 8px; border-radius: 12px; background: white; border-left: 6px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .item-img { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; margin-right: 10px; background: #eee; }
+        .item-info { flex-grow: 1; text-align: left; }
         .danger { border-left-color: var(--urgent); background: #fff1f2; }
         .warning { border-left-color: var(--warning); background: #fff9e6; }
         .fresh { border-left-color: var(--fresh); background: #f0fff4; }
 
-        /* Courses & Stats */
-        .section-title { text-align: left; font-size: 16px; font-weight: bold; margin: 20px 0 10px; color: var(--primary); border-bottom: 2px solid #eee; padding-bottom: 5px; }
+        .section-title { text-align: left; font-size: 16px; font-weight: bold; margin: 20px 0 10px; color: var(--primary); }
         #shoppingList { text-align: left; background: #f9f9f9; padding: 10px; border-radius: 10px; }
-        .shop-item { display: flex; justify-content: space-between; font-size: 14px; padding: 5px 0; border-bottom: 1px solid #eee; }
-        .stats { display: flex; justify-content: space-around; background: #2d3436; color: white; padding: 15px; border-radius: 15px; margin-top: 20px; font-size: 12px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="priorityAlert">🚀 À MANGER D'URGENCE !</div>
+    <div id="priorityAlert">⚠️ URGENCES DANS LE FRIGO</div>
     
     <div id="reader"></div>
-    <div id="log" style="font-size:11px; margin:5px;">Scanner un code-barres...</div>
+    <div id="log" style="font-size:11px; margin:5px;">Prêt...</div>
 
-    <input type="text" id="foodName" placeholder="Nom de l'aliment">
-    
-    <div style="background: #f9f9f9; padding: 10px; border-radius: 15px; border: 1px dashed var(--primary);">
-        <button class="btn btn-ai" onclick="readDateWithIA()">🔍 SCANNER LA DATE (IA)</button>
-        <button class="btn btn-file" onclick="document.getElementById('fileInput').click()">🖼️ PHOTO DE LA DATE</button>
-        <input type="file" id="fileInput" hidden accept="image/*" onchange="readFile(this)">
-        <input type="date" id="expiryDate">
+    <div class="input-group">
+        <input type="text" id="foodName" placeholder="Nom de l'aliment">
+        <button class="btn btn-voice" style="width: 50px;" onclick="startVoice()">🎤</button>
     </div>
 
-    <div style="display: flex; justify-content: space-between; margin: 5px 0;">
-        <button class="btn btn-quick" style="background:#ff7675; color:white;" onclick="adjustDays(-1)">-1j</button>
-        <button class="btn btn-quick" onclick="adjustDays(3)">+3j</button>
-        <button class="btn btn-quick" onclick="adjustDays(7)">+7j</button>
-        <button class="btn btn-quick" onclick="adjustDays(14)">+14j</button>
+    <div style="background: #f9f9f9; padding: 10px; border-radius: 15px; border: 1px dashed var(--primary);">
+        <button class="btn btn-photo" onclick="document.getElementById('imgInput').click()">📸 PRENDRE UNE PHOTO DU PLAT</button>
+        <input type="file" id="imgInput" hidden accept="image/*" capture="environment" onchange="previewImg(this)">
+        <img id="tempImg" style="display:none; width:100px; margin:5px; border-radius:8px;">
+        
+        <button class="btn btn-ai" onclick="readDateWithIA()">🔍 SCANNER LA DATE (IA)</button>
+        <input type="date" id="expiryDate">
     </div>
 
     <button class="btn btn-nfc" onclick="writeToNFC()">💾 GRAVER & AJOUTER AU STOCK</button>
 
-    <div class="section-title">📍 MON FRIGO</div>
+    <div class="section-title">📍 MON STOCK ACTUEL</div>
     <div id="inventory"></div>
 
-    <div class="section-title">🛒 LISTE DE COURSES (Auto)</div>
+    <div class="section-title">🛒 LISTE DE COURSES</div>
     <div id="shoppingList"></div>
-
-    <div class="stats">
-        <div>🥗 Consommés<br><b id="countEaten">0</b></div>
-        <div>🗑️ Périmés<br><b id="countWasted">0</b></div>
-    </div>
+    <button class="btn btn-share" onclick="shareList()">📲 ENVOYER PAR WHATSAPP</button>
 </div>
 
 <script>
     let scanner = new Html5Qrcode("reader");
     let inventory = JSON.parse(localStorage.getItem('foodStock')) || [];
     let shopping = JSON.parse(localStorage.getItem('shopList')) || [];
-    let stats = JSON.parse(localStorage.getItem('foodStats')) || { eaten: 0, wasted: 0 };
+    let currentImgBase64 = "";
 
     scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 200 }, (decoded) => {
         fetch(`https://world.openfoodfacts.org/api/v0/product/${decoded}.json`)
@@ -88,121 +80,114 @@
             });
     });
 
-    async function readDateWithIA() {
-        const video = document.querySelector('video');
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-        processImage(canvas);
+    // 1. COMMANDE VOCALE
+    function startVoice() {
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.lang = 'fr-FR';
+        recognition.onresult = (event) => {
+            document.getElementById('foodName').value = event.results[0][0].transcript;
+        };
+        recognition.start();
     }
 
-    function readFile(input) {
+    // 2. GESTION PHOTO
+    function previewImg(input) {
         if (input.files && input.files[0]) {
             const reader = new FileReader();
             reader.onload = e => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.width; canvas.height = img.height;
-                    canvas.getContext('2d').drawImage(img, 0, 0);
-                    processImage(canvas);
-                };
-                img.src = e.target.result;
+                currentImgBase64 = e.target.result;
+                document.getElementById('tempImg').src = e.target.result;
+                document.getElementById('tempImg').style.display = "inline-block";
             };
             reader.readAsDataURL(input.files[0]);
         }
     }
 
-    async function processImage(source) {
-        document.getElementById('log').innerText = "⏳ IA en cours...";
-        try {
-            const worker = await Tesseract.createWorker('fra');
-            const { data: { text } } = await worker.recognize(source);
-            await worker.terminate();
-            const dateMatch = text.match(/(\d{2})[\/\.\-\s](\d{2})[\/\.\-\s](\d{2,4})/);
-            if (dateMatch) {
-                let year = dateMatch[3].length === 2 ? "20" + dateMatch[3] : dateMatch[3];
-                document.getElementById('expiryDate').value = `${year}-${dateMatch[2]}-${dateMatch[1]}`;
-                document.getElementById('log').innerText = "✅ Date détectée !";
-            } else { document.getElementById('log').innerText = "❌ Date non lue."; }
-        } catch (e) { document.getElementById('log').innerText = "❌ Erreur IA."; }
-    }
-
-    function adjustDays(days) {
-        let d = document.getElementById('expiryDate').value ? new Date(document.getElementById('expiryDate').value) : new Date();
-        d.setDate(d.getDate() + days);
-        document.getElementById('expiryDate').value = d.toISOString().split('T')[0];
+    // 3. IA LECTURE DATE
+    async function readDateWithIA() {
+        const video = document.querySelector('video');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        document.getElementById('log').innerText = "⏳ Analyse IA...";
+        const worker = await Tesseract.createWorker('fra');
+        const { data: { text } } = await worker.recognize(canvas);
+        await worker.terminate();
+        const dateMatch = text.match(/(\d{2})[\/\.\-\s](\d{2})[\/\.\-\s](\d{2,4})/);
+        if (dateMatch) {
+            let year = dateMatch[3].length === 2 ? "20" + dateMatch[3] : dateMatch[3];
+            document.getElementById('expiryDate').value = `${year}-${dateMatch[2]}-${dateMatch[1]}`;
+            document.getElementById('log').innerText = "✅ Date OK";
+        }
     }
 
     async function writeToNFC() {
         const name = document.getElementById('foodName').value;
         const date = document.getElementById('expiryDate').value;
-        if(!name || !date) return alert("Nom ou Date manquante");
+        if(!name || !date) return alert("Remplis tout !");
+        
         try {
             const ndef = new NDEFReader();
             await ndef.scan();
             await ndef.write(`${name} | Exp: ${date}`);
-            inventory.push({ name, date });
-            save();
-            render();
-        } catch(e) { 
-            inventory.push({ name, date }); // Sauvegarde même sans puce pour le test
-            save(); render();
-        }
+        } catch(e) { console.log("NFC non utilisé"); }
+
+        inventory.push({ name, date, img: currentImgBase64 });
+        currentImgBase64 = "";
+        document.getElementById('tempImg').style.display = "none";
+        save(); render();
+    }
+
+    // 4. PARTAGE WHATSAPP
+    function shareList() {
+        if(shopping.length === 0) return alert("Liste vide !");
+        let text = "🛒 *Ma Liste de Courses :*%0A";
+        shopping.forEach(item => text += `- ${item}%0A`);
+        window.open(`https://wa.me/?text=${text}`);
     }
 
     function save() {
         localStorage.setItem('foodStock', JSON.stringify(inventory));
         localStorage.setItem('shopList', JSON.stringify(shopping));
-        localStorage.setItem('foodStats', JSON.stringify(stats));
     }
 
     function render() {
         const invDiv = document.getElementById('inventory');
-        const alertBox = document.getElementById('priorityAlert');
         const shopDiv = document.getElementById('shoppingList');
-        invDiv.innerHTML = "";
-        shopDiv.innerHTML = "";
-        let hasUrgent = false;
+        invDiv.innerHTML = ""; shopDiv.innerHTML = "";
+        let urgent = false;
 
         inventory.sort((a,b) => new Date(a.date) - new Date(b.date));
 
         inventory.forEach((it, i) => {
             let diff = (new Date(it.date) - new Date()) / 86400000;
             let cls = diff < 0 ? 'danger' : (diff < 2 ? 'warning' : 'fresh');
-            if(diff < 2) hasUrgent = true;
+            if(diff < 2) urgent = true;
 
             invDiv.innerHTML += `
                 <div class="item ${cls}">
-                    <div style="text-align:left">
-                        <b>${it.name}</b><br><small>Jusqu'au ${new Date(it.date).toLocaleDateString()}</small>
+                    <img src="${it.img || 'https://via.placeholder.com/50'}" class="item-img">
+                    <div class="item-info">
+                        <b>${it.name}</b><br><small>Exp: ${it.date}</small>
                     </div>
-                    <div style="display:flex; gap:5px;">
-                        <button class="btn-quick" onclick="window.open('https://www.marmiton.org/recettes/recherche.aspx?aqt=${it.name}')">🍳</button>
-                        <button onclick="consume(${i}, ${diff < 0})" style="background:none; border:none; font-size:20px;">✅</button>
-                    </div>
+                    <button onclick="consume(${i})" style="border:none; background:none; font-size:20px;">✅</button>
                 </div>`;
         });
 
         shopping.forEach((it, i) => {
-            shopDiv.innerHTML += `<div class="shop-item"><span>🛒 ${it}</span><button onclick="delShop(${i})" style="border:none; color:red">X</button></div>`;
+            shopDiv.innerHTML += `<div style="display:flex; justify-content:space-between; padding:5px;"><span>🛒 ${it}</span><button onclick="delShop(${i})" style="color:red; border:none; background:none;">X</button></div>`;
         });
 
-        alertBox.style.display = hasUrgent ? "block" : "none";
-        document.getElementById('countEaten').innerText = stats.eaten;
-        document.getElementById('countWasted').innerText = stats.wasted;
+        document.getElementById('priorityAlert').style.display = urgent ? "block" : "none";
     }
 
-    function consume(i, isWasted) {
-        const item = inventory[i];
-        if(isWasted) stats.wasted++; else stats.eaten++;
-        if(!shopping.includes(item.name)) shopping.push(item.name);
+    function consume(i) {
+        if(!shopping.includes(inventory[i].name)) shopping.push(inventory[i].name);
         inventory.splice(i, 1);
         save(); render();
     }
 
     function delShop(i) { shopping.splice(i, 1); save(); render(); }
-    
     render();
 </script>
 </body>
