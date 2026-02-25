@@ -3,54 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kitchen Master ULTIME v15</title>
+    <title>Kitchen Master ULTIME v16</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root { --p: #6c5ce7; --s: #00cec9; --d: #ff7675; --f: #2ed573; --bg: #f8f9fa; --card: #ffffff; }
+        :root { --p: #6c5ce7; --s: #00cec9; --d: #ff7675; --f: #2ed573; --bg: #f1f2f6; --card: #ffffff; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 10px; color: #2d3436; }
-        .card { background: var(--card); padding: 15px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        .card { background: var(--card); padding: 15px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 12px; }
         
-        /* Menu Zones */
-        .tab-buttons { display: flex; gap: 5px; margin-bottom: 15px; }
-        .tab-buttons button { flex: 1; padding: 12px 5px; background: #eee; border: none; border-radius: 12px; font-size: 11px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        .tab-buttons button.active { background: var(--p); color: white; }
+        /* FIX BOUTONS ZONES */
+        .tab-buttons { display: flex; gap: 5px; margin-bottom: 15px; background: #eee; padding: 5px; border-radius: 15px; }
+        .tab-buttons button { flex: 1; padding: 12px 5px; border: none; border-radius: 10px; font-size: 11px; font-weight: bold; cursor: pointer; transition: 0.2s; background: transparent; color: #666; }
+        .tab-buttons button.active { background: var(--card); color: var(--p); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 
-        /* Camera */
-        #reader { width: 100% !important; border-radius: 20px; overflow: hidden; background: #000; min-height: 250px; }
+        #reader { width: 100% !important; border-radius: 18px; overflow: hidden; background: #000; min-height: 250px; }
         
-        /* Dashboard & Graph */
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-        .stat-box { padding: 10px; border-radius: 15px; background: #f1f2f6; text-align: center; }
+        .stat-box { padding: 10px; border-radius: 15px; background: #f8f9fa; text-align: center; border: 1px solid #eee; }
         .stat-box b { font-size: 18px; color: var(--p); display: block; }
         
-        .btn { border: none; padding: 12px; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; margin: 5px 0; color: white; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        input, select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; margin-top: 5px; box-sizing: border-box; }
+        .btn { border: none; padding: 12px; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; margin: 5px 0; color: white; transition: 0.2s; }
+        .btn:active { transform: scale(0.97); }
         
-        .item { display: flex; align-items: center; padding: 12px; background: white; border-radius: 15px; margin-bottom: 8px; border-left: 5px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        #aiResponse { background: #e1fbff; padding: 10px; border-radius: 10px; margin: 10px 0; display: none; font-size: 13px; border-left: 4px solid var(--s); }
+        input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; margin-top: 5px; box-sizing: border-box; font-size: 14px; }
+        
+        .item { display: flex; align-items: center; padding: 15px; background: white; border-radius: 18px; margin-bottom: 8px; border-left: 6px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.04); }
+        #aiResponse { background: #e1fbff; padding: 12px; border-radius: 12px; margin: 10px 0; display: none; font-size: 13px; border-left: 4px solid var(--s); color: #0984e3; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <div class="stats-grid">
-        <div class="stat-box"><b><span id="statMoney">0</span>€</b>Économisés</div>
-        <div class="stat-box"><b><span id="statCo2">0</span>kg</b>CO2 Sauvé</div>
+        <div class="stat-box"><b><span id="statMoney">0</span>€</b>Sauvés</div>
+        <div class="stat-box"><b><span id="statCo2">0</span>kg</b>CO2</div>
     </div>
-    <canvas id="wasteChart" height="100"></canvas>
-    <div style="margin-top:10px; font-size: 12px; font-weight: bold;">🥗 Nutri-Score Global : <span id="nutriLabel">Analyse...</span></div>
+    <div style="height: 120px; position: relative; margin: auto;">
+        <canvas id="wasteChart"></canvas>
+    </div>
 </div>
 
 <div class="card">
     <div id="reader"></div>
-    <div style="display: flex; gap: 5px; margin-top: 10px;">
+    <div style="display: flex; gap: 8px; margin-top: 12px;">
         <button class="btn" style="background: var(--s);" onclick="startCamera()">🎥 Relancer</button>
         <button class="btn" style="background: #fdcb6e;" onclick="toggleFlash()">🔦 Flash</button>
-    </div>
-    <div class="stats-grid" style="margin-top:10px;">
-        <button class="btn" style="background: #636e72;" onclick="simulateTicket()">📄 Ticket</button>
-        <button class="btn" style="background: #fab1a0;" onclick="simulateGroup()">📸 Groupe</button>
     </div>
 </div>
 
@@ -61,110 +58,115 @@
         <button id="tabGardeManger" onclick="setZone('GardeManger')">🏠 Cellier</button>
     </div>
     
-    <input type="text" id="itemName" placeholder="Nom de l'aliment">
+    <input type="text" id="itemName" placeholder="Nom de l'aliment (ou scan)">
     <div id="aiResponse"></div>
     
-    <div style="display: flex; gap: 5px;">
+    <div style="display: flex; gap: 8px;">
         <button class="btn" style="background: var(--p); flex: 2;" onclick="substituteAI()">🤖 Substituer</button>
-        <button class="btn" style="background: var(--f); flex: 1;" onclick="batchCookingAI()">👨‍🍳 Menu</button>
+        <button class="btn" style="background: var(--p); opacity: 0.8; flex: 1;" onclick="batchCookingAI()">👨‍🍳 Menu</button>
     </div>
 
     <input type="date" id="itemDate">
-    <button class="btn" style="background: var(--p); margin-top: 10px;" onclick="addItem()">💾 Ajouter au Stock</button>
+    <button class="btn" style="background: var(--f); margin-top: 10px; font-size: 16px;" onclick="addItem()">💾 AJOUTER AU STOCK</button>
 </div>
 
-<div id="inventoryList"></div>
+<div id="inventoryList" style="padding-bottom: 20px;"></div>
 
 <script>
-    let stock = JSON.parse(localStorage.getItem('v15Stock')) || [];
-    let history = JSON.parse(localStorage.getItem('v15History')) || { eaten: 0, wasted: 0, money: 0, co2: 0 };
+    let stock = JSON.parse(localStorage.getItem('v16Stock')) || [];
+    let history = JSON.parse(localStorage.getItem('v16History')) || { eaten: 0, wasted: 0, money: 0, co2: 0 };
     let currentZone = 'Frigo';
     let html5QrCode;
     let myChart;
 
-    // --- 📊 GRAPH ET STATS ---
+    // --- INITIALISATION GRAPH ---
     function initChart() {
         const ctx = document.getElementById('wasteChart').getContext('2d');
         myChart = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: ['Consommé', 'Gaspillé'],
+                labels: ['Mangé', 'Jeté'],
                 datasets: [{
-                    data: [history.eaten, history.wasted],
+                    data: [history.eaten || 1, history.wasted || 0],
                     backgroundColor: ['#2ed573', '#ff7675'],
-                    borderWidth: 0
+                    hoverOffset: 4, borderWeight: 0
                 }]
             },
-            options: { cutout: '70%', plugins: { legend: { display: false } } }
+            options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
     }
 
-    // --- 🎥 CAMERA ET FLASH ---
+    // --- GESTION CAMERA ---
     function startCamera() {
         if (html5QrCode) {
-            html5QrCode.stop().then(() => { startScanner(); }).catch(() => { startScanner(); });
-        } else { startScanner(); }
+            html5QrCode.stop().then(startScanner).catch(startScanner);
+        } else {
+            startScanner();
+        }
     }
 
     function startScanner() {
         html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
+        html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, (text) => {
             fetch(`https://world.openfoodfacts.org/api/v0/product/${text}.json`)
             .then(r => r.json()).then(d => {
                 if(d.status === 1) document.getElementById('itemName').value = d.product.product_name;
             });
-        }).catch(err => console.error(err));
+        }).catch(err => console.error("Erreur caméra:", err));
     }
 
     async function toggleFlash() {
-        const track = html5QrCode.getRunningTrack();
-        const capabilities = track.getCapabilities();
-        if (capabilities.torch) {
+        try {
+            const track = html5QrCode.getRunningTrack();
             const state = track.getSettings().torch;
             await track.applyConstraints({ advanced: [{ torch: !state }] });
-        }
+        } catch(e) { alert("Flash indisponible."); }
     }
 
-    // --- 🧠 IA FUNCTIONS ---
+    // --- LOGIQUE DES ZONES (FIXED) ---
+    function setZone(zone) {
+        currentZone = zone;
+        // Mise à jour visuelle des boutons
+        document.querySelectorAll('.tab-buttons button').forEach(b => b.classList.remove('active'));
+        if(zone === 'Frigo') document.getElementById('tabFrigo').classList.add('active');
+        if(zone === 'Congelo') document.getElementById('tabCongelo').classList.add('active');
+        if(zone === 'GardeManger') document.getElementById('tabGardeManger').classList.add('active');
+        
+        console.log("Zone actuelle : " + currentZone);
+        render(); // Relance l'affichage pour la nouvelle zone
+    }
+
+    // --- STOCK ET IA ---
+    function addItem() {
+        const n = document.getElementById('itemName').value;
+        const d = document.getElementById('itemDate').value;
+        if(!n || !d) return alert("Nom et Date requis !");
+        
+        stock.push({ name: n, date: d, zone: currentZone, id: Date.now() });
+        save();
+        document.getElementById('itemName').value = "";
+        render();
+    }
+
+    function processItem(id, eaten) {
+        const idx = stock.findIndex(x => x.id === id);
+        if(eaten) { history.eaten++; history.money += 3.5; history.co2 += 1.2; } 
+        else { history.wasted++; }
+        stock.splice(idx, 1);
+        save(); render();
+    }
+
     function substituteAI() {
-        const name = document.getElementById('itemName').value.toLowerCase();
+        const val = document.getElementById('itemName').value.toLowerCase();
         const res = document.getElementById('aiResponse');
         res.style.display = 'block';
-        if(name.includes('lait')) res.innerText = "💡 Plus de lait ? Utilise du lait d'amande ou un peu de yaourt détendu.";
-        else if(name.includes('oeuf')) res.innerText = "💡 Pas d'oeufs ? Une banane écrasée ou de la compote fonctionne en pâtisserie.";
-        else res.innerText = "🤖 Je cherche une alternative... Essaie un ingrédient de base !";
+        if(val.includes('lait')) res.innerText = "🤖 Plus de lait ? Utilise du lait végétal ou du yaourt nature.";
+        else if(val.includes('oeuf')) res.innerText = "🤖 Pas d'oeufs ? Compote de pommes ou banane écrasée pour tes gâteaux.";
+        else res.innerText = "🤖 Je n'ai pas de substitut connu pour ça, mais essaie un produit de base !";
     }
 
     function batchCookingAI() {
         const res = document.getElementById('aiResponse');
         res.style.display = 'block';
-        const items = stock.slice(0, 3).map(i => i.name).join(', ');
-        res.innerText = items ? `👨‍🍳 Batch Menu : Avec ${items}, fais un grand gratin pour 3 jours !` : "Ajoute des produits pour créer un menu.";
-    }
-
-    // --- 📁 GESTION STOCK ---
-    function setZone(zone) {
-        currentZone = zone;
-        document.querySelectorAll('.tab-buttons button').forEach(b => b.classList.remove('active'));
-        document.getElementById('tab' + zone).classList.add('active');
-        render();
-    }
-
-    function addItem(name = null, date = null) {
-        const n = name || document.getElementById('itemName').value;
-        const d = date || document.getElementById('itemDate').value;
-        if(!n || !d) return;
-        stock.push({ name: n, date: d, zone: currentZone, id: Date.now() });
-        save(); render();
-    }
-
-    function processItem(id, success) {
-        const i = stock.findIndex(x => x.id === id);
-        if(success) { history.eaten++; history.money += 3.5; history.co2 += 1.2; }
-        else { history.wasted++; }
-        stock.splice(i, 1);
-        save(); render();
-    }
-
-    function simulateTicket() { alert("Analyse du ticket..."); ["Beurre", "Jambon", "Pâtes"].forEach(p => addItem(p, "2026-03-10")); }
-    function simulateGroup() { alert("Scan de groupe..."); ["Pomme", "Poire"].forEach(p => addItem(p, 
+        const items = stock.filter(s => s.zone === 'Frigo').slice(0, 2).map(i => i.name).join(' et ');
+        res.innerText = items ? `👨‍🍳 Idée : Fais un gratin avec to
