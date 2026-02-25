@@ -3,139 +3,207 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Food - IA Vision</title>
+    <title>Smart Kitchen Pro - IA & Anti-Gaspi</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #f0f2f5; padding: 15px; }
-        .container { max-width: 450px; margin: auto; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-        #reader { width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 10px; }
-        .status-badge { padding: 8px; border-radius: 8px; margin: 10px 0; font-weight: bold; font-size: 13px; background: #e7f3ff; color: #1877f2; }
-        input { width: 100%; padding: 12px; margin-bottom: 10px; border: 2px solid #ddd; border-radius: 10px; box-sizing: border-box; }
-        button { width: 100%; padding: 15px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
-        .btn-nfc { background: #1877f2; color: white; }
-        .btn-ai { background: #6c5ce7; color: white; font-size: 14px; }
-        .inventory { margin-top: 25px; text-align: left; }
-        .food-item { display: flex; justify-content: space-between; padding: 10px; border-radius: 10px; margin-bottom: 5px; border-left: 5px solid #ccc; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .fresh { border-left-color: #2ecc71; }
-        .warning { border-left-color: #f39c12; }
-        .danger { border-left-color: #e74c3c; }
-        #loading-ai { display: none; color: #6c5ce7; font-weight: bold; margin-bottom: 10px; }
+        :root { --urgent: #ff7675; --warning: #ffa502; --fresh: #2ed573; --primary: #6c5ce7; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #f0f2f5; padding: 10px; color: #333; }
+        .container { max-width: 450px; margin: auto; background: white; padding: 15px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        
+        /* Alertes */
+        #priorityAlert { display: none; background: var(--urgent); color: white; padding: 10px; border-radius: 12px; margin-bottom: 15px; font-weight: bold; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% {opacity: 1;} 50% {opacity: 0.8;} 100% {opacity: 1;} }
+
+        #reader { width: 100%; border-radius: 15px; overflow: hidden; background: #000; }
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin: 5px 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-ai { background: var(--primary); color: white; }
+        .btn-nfc { background: #1877f2; color: white; font-size: 16px; }
+        .btn-file { background: #00b894; color: white; font-size: 13px; }
+        .btn-quick { width: 22%; font-size: 11px; padding: 10px 5px; background: #e0e0e0; }
+
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 2px solid #ddd; border-radius: 10px; box-sizing: border-box; }
+        
+        /* Liste items */
+        .item { display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 8px; border-radius: 10px; background: white; border-left: 6px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .danger { border-left-color: var(--urgent); background: #fff1f2; }
+        .warning { border-left-color: var(--warning); background: #fff9e6; }
+        .fresh { border-left-color: var(--fresh); background: #f0fff4; }
+
+        /* Courses & Stats */
+        .section-title { text-align: left; font-size: 16px; font-weight: bold; margin: 20px 0 10px; color: var(--primary); border-bottom: 2px solid #eee; padding-bottom: 5px; }
+        #shoppingList { text-align: left; background: #f9f9f9; padding: 10px; border-radius: 10px; }
+        .shop-item { display: flex; justify-content: space-between; font-size: 14px; padding: 5px 0; border-bottom: 1px solid #eee; }
+        .stats { display: flex; justify-content: space-around; background: #2d3436; color: white; padding: 15px; border-radius: 15px; margin-top: 20px; font-size: 12px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>🍱 IA Vision Food</h2>
+    <div id="priorityAlert">🚀 À MANGER D'URGENCE !</div>
     
     <div id="reader"></div>
-    <div id="status" class="status-badge">Prêt à scanner</div>
+    <div id="log" style="font-size:11px; margin:5px;">Scanner un code-barres...</div>
 
-    <input type="text" id="foodNameInput" placeholder="Nom de l'aliment">
+    <input type="text" id="foodName" placeholder="Nom de l'aliment">
     
-    <div id="loading-ai">🤖 L'IA analyse la date...</div>
-    <button class="btn-ai" onclick="captureAndReadDate()">🔍 Lire la date sur l'emballage (IA)</button>
-    
-    <input type="date" id="expiryInput">
+    <div style="background: #f9f9f9; padding: 10px; border-radius: 15px; border: 1px dashed var(--primary);">
+        <button class="btn btn-ai" onclick="readDateWithIA()">🔍 SCANNER LA DATE (IA)</button>
+        <button class="btn btn-file" onclick="document.getElementById('fileInput').click()">🖼️ PHOTO DE LA DATE</button>
+        <input type="file" id="fileInput" hidden accept="image/*" onchange="readFile(this)">
+        <input type="date" id="expiryDate">
+    </div>
 
-    <button class="btn-nfc" onclick="writeToNFC()">💾 Enregistrer & NFC</button>
+    <div style="display: flex; justify-content: space-between; margin: 5px 0;">
+        <button class="btn btn-quick" style="background:#ff7675; color:white;" onclick="adjustDays(-1)">-1j</button>
+        <button class="btn btn-quick" onclick="adjustDays(3)">+3j</button>
+        <button class="btn btn-quick" onclick="adjustDays(7)">+7j</button>
+        <button class="btn btn-quick" onclick="adjustDays(14)">+14j</button>
+    </div>
 
-    <div class="inventory">
-        <h3>📍 État du stock</h3>
-        <div id="foodList"></div>
+    <button class="btn btn-nfc" onclick="writeToNFC()">💾 GRAVER & AJOUTER AU STOCK</button>
+
+    <div class="section-title">📍 MON FRIGO</div>
+    <div id="inventory"></div>
+
+    <div class="section-title">🛒 LISTE DE COURSES (Auto)</div>
+    <div id="shoppingList"></div>
+
+    <div class="stats">
+        <div>🥗 Consommés<br><b id="countEaten">0</b></div>
+        <div>🗑️ Périmés<br><b id="countWasted">0</b></div>
     </div>
 </div>
 
 <script>
-    let html5QrCode = new Html5Qrcode("reader");
-    let inventory = JSON.parse(localStorage.getItem('myInventory')) || [];
+    let scanner = new Html5Qrcode("reader");
+    let inventory = JSON.parse(localStorage.getItem('foodStock')) || [];
+    let shopping = JSON.parse(localStorage.getItem('shopList')) || [];
+    let stats = JSON.parse(localStorage.getItem('foodStats')) || { eaten: 0, wasted: 0 };
 
-    // Lancer le scanner de code-barres
-    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
-        fetch(`https://world.openfoodfacts.org/api/v0/product/${text}.json`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 1) {
-                    document.getElementById('foodNameInput').value = data.product.product_name;
-                    document.getElementById('status').innerText = "✅ Produit trouvé";
-                }
+    scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 200 }, (decoded) => {
+        fetch(`https://world.openfoodfacts.org/api/v0/product/${decoded}.json`)
+            .then(r => r.json()).then(d => {
+                if(d.status === 1) document.getElementById('foodName').value = d.product.product_name;
             });
     });
 
-    // FONCTION IA : Capture l'image du scanner et lit le texte
-    async function captureAndReadDate() {
-        const loading = document.getElementById('loading-ai');
-        loading.style.display = "block";
-        
-        try {
-            // 1. On récupère l'image actuelle de la caméra
-            const video = document.querySelector('video');
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            
-            // 2. L'IA Tesseract analyse l'image
-            const result = await Tesseract.recognize(canvas, 'fra', { logger: m => console.log(m) });
-            
-            // 3. On cherche une date dans le texte (format DD/MM/YY ou DD.MM.YY)
-            const dateRegEx = /(\d{2}[\/\.\-]\d{2}[\/\.\-]\d{2,4})/;
-            const match = result.data.text.match(dateRegEx);
+    async function readDateWithIA() {
+        const video = document.querySelector('video');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        processImage(canvas);
+    }
 
-            if (match) {
-                let foundDate = match[0].replace(/[\.\-]/g, '/');
-                // Conversion simple pour l'input date (YYYY-MM-DD)
-                const parts = foundDate.split('/');
-                let year = parts[2].length === 2 ? "20" + parts[2] : parts[2];
-                document.getElementById('expiryInput').value = `${year}-${parts[1]}-${parts[0]}`;
-                document.getElementById('status').innerText = "🤖 IA : Date détectée !";
-            } else {
-                alert("L'IA n'a pas vu de date nette. Approchez l'emballage et réessayez.");
-            }
-        } catch (e) {
-            alert("Erreur IA : " + e);
-        } finally {
-            loading.style.display = "none";
+    function readFile(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width; canvas.height = img.height;
+                    canvas.getContext('2d').drawImage(img, 0, 0);
+                    processImage(canvas);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(input.files[0]);
         }
     }
 
-    async function writeToNFC() {
-        const name = document.getElementById('foodNameInput').value;
-        const expiry = document.getElementById('expiryInput').value;
-        if (!name || !expiry) return alert("Infos manquantes");
+    async function processImage(source) {
+        document.getElementById('log').innerText = "⏳ IA en cours...";
+        try {
+            const worker = await Tesseract.createWorker('fra');
+            const { data: { text } } = await worker.recognize(source);
+            await worker.terminate();
+            const dateMatch = text.match(/(\d{2})[\/\.\-\s](\d{2})[\/\.\-\s](\d{2,4})/);
+            if (dateMatch) {
+                let year = dateMatch[3].length === 2 ? "20" + dateMatch[3] : dateMatch[3];
+                document.getElementById('expiryDate').value = `${year}-${dateMatch[2]}-${dateMatch[1]}`;
+                document.getElementById('log').innerText = "✅ Date détectée !";
+            } else { document.getElementById('log').innerText = "❌ Date non lue."; }
+        } catch (e) { document.getElementById('log').innerText = "❌ Erreur IA."; }
+    }
 
+    function adjustDays(days) {
+        let d = document.getElementById('expiryDate').value ? new Date(document.getElementById('expiryDate').value) : new Date();
+        d.setDate(d.getDate() + days);
+        document.getElementById('expiryDate').value = d.toISOString().split('T')[0];
+    }
+
+    async function writeToNFC() {
+        const name = document.getElementById('foodName').value;
+        const date = document.getElementById('expiryDate').value;
+        if(!name || !date) return alert("Nom ou Date manquante");
         try {
             const ndef = new NDEFReader();
             await ndef.scan();
-            await ndef.write(`${name} | Exp: ${expiry}`);
-            
-            inventory.push({ name, expiry });
-            localStorage.setItem('myInventory', JSON.stringify(inventory));
-            renderList();
-        } catch (e) { alert(e); }
+            await ndef.write(`${name} | Exp: ${date}`);
+            inventory.push({ name, date });
+            save();
+            render();
+        } catch(e) { 
+            inventory.push({ name, date }); // Sauvegarde même sans puce pour le test
+            save(); render();
+        }
     }
 
-    function renderList() {
-        const listDiv = document.getElementById('foodList');
-        listDiv.innerHTML = "";
-        const now = new Date();
-        inventory.forEach((item, index) => {
-            const diff = (new Date(item.expiry) - now) / (1000*60*60*24);
-            let cls = diff < 0 ? "danger" : (diff < 2 ? "warning" : "fresh");
-            listDiv.innerHTML += `
-                <div class="food-item ${cls}">
-                    <span><strong>${item.name}</strong><br><small>DLC: ${item.expiry}</small></span>
-                    <button style="width:30px; background:red; color:white;" onclick="removeItem(${index})">X</button>
+    function save() {
+        localStorage.setItem('foodStock', JSON.stringify(inventory));
+        localStorage.setItem('shopList', JSON.stringify(shopping));
+        localStorage.setItem('foodStats', JSON.stringify(stats));
+    }
+
+    function render() {
+        const invDiv = document.getElementById('inventory');
+        const alertBox = document.getElementById('priorityAlert');
+        const shopDiv = document.getElementById('shoppingList');
+        invDiv.innerHTML = "";
+        shopDiv.innerHTML = "";
+        let hasUrgent = false;
+
+        inventory.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+        inventory.forEach((it, i) => {
+            let diff = (new Date(it.date) - new Date()) / 86400000;
+            let cls = diff < 0 ? 'danger' : (diff < 2 ? 'warning' : 'fresh');
+            if(diff < 2) hasUrgent = true;
+
+            invDiv.innerHTML += `
+                <div class="item ${cls}">
+                    <div style="text-align:left">
+                        <b>${it.name}</b><br><small>Jusqu'au ${new Date(it.date).toLocaleDateString()}</small>
+                    </div>
+                    <div style="display:flex; gap:5px;">
+                        <button class="btn-quick" onclick="window.open('https://www.marmiton.org/recettes/recherche.aspx?aqt=${it.name}')">🍳</button>
+                        <button onclick="consume(${i}, ${diff < 0})" style="background:none; border:none; font-size:20px;">✅</button>
+                    </div>
                 </div>`;
         });
+
+        shopping.forEach((it, i) => {
+            shopDiv.innerHTML += `<div class="shop-item"><span>🛒 ${it}</span><button onclick="delShop(${i})" style="border:none; color:red">X</button></div>`;
+        });
+
+        alertBox.style.display = hasUrgent ? "block" : "none";
+        document.getElementById('countEaten').innerText = stats.eaten;
+        document.getElementById('countWasted').innerText = stats.wasted;
     }
 
-    function removeItem(index) {
-        inventory.splice(index, 1);
-        localStorage.setItem('myInventory', JSON.stringify(inventory));
-        renderList();
+    function consume(i, isWasted) {
+        const item = inventory[i];
+        if(isWasted) stats.wasted++; else stats.eaten++;
+        if(!shopping.includes(item.name)) shopping.push(item.name);
+        inventory.splice(i, 1);
+        save(); render();
     }
-    renderList();
+
+    function delShop(i) { shopping.splice(i, 1); save(); render(); }
+    
+    render();
 </script>
 </body>
 </html>
