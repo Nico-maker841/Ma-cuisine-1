@@ -1,1193 +1,1573 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFC Food Pro - Enterprise Suite</title>
-    <style>
-        /* ==========================================================================
-           SECTION 1 : DESIGN SYSTEM GLOBAL (Lignes 1-500)
-           ========================================================================== */
-        :root {
-            --primary: #2ecc71; --primary-dark: #27ae60; --secondary: #3498db;
-            --dark: #0f0f0f; --card: #1a1a1a; --text: #e0e0e0; --muted: #888;
-            --danger: #e74c3c; --warning: #f1c40f; --info: #9b59b6;
-            --radius: 12px; --shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>NFC TAG DATABASE</title>
+<meta name="theme-color" content="#00e5ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="NFC DB">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link id="manifest-link" rel="manifest">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js">
+// ── GEL DE COMPTE ──
+function ownerFreeze(u){if(!confirm('Geler "'+u+'" ?\n\nIl ne pourra plus se connecter.'))return;const a=loadAccounts();if(!a[u])return;a[u].frozen=true;a[u].kicked=true;saveAccounts(a);renderOwnerAccounts();addLog('admin','Compte gelé: '+u);showToast('🧊 '+u+' gelé','success');}
+function ownerUnfreeze(u){const a=loadAccounts();if(!a[u])return;a[u].frozen=false;delete a[u].kicked;saveAccounts(a);renderOwnerAccounts();showToast('♻️ '+u+' dégelé','success');}
 
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            background-color: var(--dark); color: var(--text); 
-            margin: 0; padding: 0; line-height: 1.6; overflow-x: hidden;
-        }
+// ── WELCOME MSG ──
+function saveWelcomeMsg(){const msg=document.getElementById('welcome-inp')?.value?.trim();if(!msg){showToast('Écris un message','error-t');return;}fbdb.ref('globalConfig').update({welcomeMsg:msg,welcomeActive:true});addLog('admin',"Message d'accueil défini");showToast("✓ Message d'accueil sauvegardé !",'success');}
+function clearWelcomeMsg(){fbdb.ref('globalConfig').update({welcomeMsg:null,welcomeActive:false});showToast('Message supprimé','');}
+function checkWelcomeMsg(){
+  if(!currentUser||isOwner())return;
+  const cfg=cachedGlobalConfig||{};if(!cfg.welcomeActive||!cfg.welcomeMsg)return;
+  const key='welcome_seen_'+currentUser.username;
+  if(sessionStorage.getItem(key))return;
+  sessionStorage.setItem(key,'1');
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:7000;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px);';
+  overlay.innerHTML='<div style="background:var(--surface);border:1px solid var(--cyan);border-radius:20px;padding:32px 24px;max-width:360px;width:100%;text-align:center;"><div style="font-size:36px;margin-bottom:12px;">👋</div><div style="font-family:var(--mono);font-size:10px;color:var(--cyan);letter-spacing:.1em;margin-bottom:10px;">MESSAGE DE L'OWNER</div><div style="font-size:14px;line-height:1.7;color:var(--text);margin-bottom:20px;">'+escHtml(cfg.welcomeMsg)+'</div><button onclick="this.closest('div[style]').remove()" style="padding:11px 28px;background:var(--cyan);border:none;border-radius:99px;color:var(--bg);font-weight:700;font-size:13px;cursor:pointer;">OK 👍</button></div>';
+  document.body.appendChild(overlay);
+}
 
-        /* --- Animations Complexes --- */
-        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes pulseNFC { 0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.4); } 70% { box-shadow: 0 0 0 20px rgba(46, 204, 113, 0); } 100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); } }
-        @keyframes shimmer { 0% { background-position: -1000px 0; } 100% { background-position: 1000px 0; } }
+// ── CUSTOM BANNER ──
+var _bannerPresetIdx=0;
+var BANNER_PRESETS=[{bg:'rgba(249,115,22,.15)',bc:'#f97316',tc:'#f97316'},{bg:'rgba(99,102,241,.12)',bc:'#6366f1',tc:'#818cf8'},{bg:'rgba(239,68,68,.12)',bc:'#ef4444',tc:'#ef4444'},{bg:'rgba(34,197,94,.1)',bc:'#22c55e',tc:'#22c55e'},{bg:'rgba(234,179,8,.1)',bc:'#eab308',tc:'#eab308'}];
+function buildBannerColorRow(){const row=document.getElementById('banner-color-row');if(!row)return;row.innerHTML=BANNER_PRESETS.map((p,i)=>'<div onclick="selectBannerPreset('+i+')" id="bcp-'+i+'" style="width:26px;height:26px;background:'+p.bg+';border:2px solid '+p.bc+';border-radius:6px;cursor:pointer;transition:all .2s;'+( i===0?'outline:2px solid white;outline-offset:2px;':'')+'"></div>').join('');}
+function selectBannerPreset(i){_bannerPresetIdx=i;document.querySelectorAll('[id^="bcp-"]').forEach((b,j)=>{b.style.outline=j===i?'2px solid white':'none';b.style.outlineOffset='2px';});}
+function saveBanner(){const text=document.getElementById('banner-inp')?.value?.trim();if(!text){showToast('Écris un texte','error-t');return;}const p=BANNER_PRESETS[_bannerPresetIdx];fbdb.ref('globalConfig').update({bannerText:text,bannerBg:p.bg,bannerBorder:p.bc,bannerTextColor:p.tc,bannerActive:true});addLog('admin','Bannière définie');showToast('✓ Bannière affichée pour tous !','success');}
+function clearBanner(){fbdb.ref('globalConfig').update({bannerText:null,bannerActive:false});showToast('Bannière supprimée','');}
+function applyCustomBanner(cfg){const banner=document.getElementById('custom-banner');if(!banner)return;if(cfg&&cfg.bannerActive&&cfg.bannerText){banner.style.display='flex';banner.textContent=cfg.bannerText;banner.style.background=cfg.bannerBg||'rgba(249,115,22,.15)';banner.style.borderLeft='4px solid '+(cfg.bannerBorder||'#f97316');banner.style.color=cfg.bannerTextColor||'#f97316';}else banner.style.display='none';}
 
-        /* --- Layout --- */
-        .app-wrapper { max-width: 600px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative; }
-        header { padding: 30px 20px; background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%); border-bottom: 1px solid #333; sticky: top; z-index: 100; }
-        
-        /* --- UI Components --- */
-        .nfc-scanner-area { 
-            margin: 40px 20px; padding: 60px 20px; border: 2px dashed var(--primary); 
-            border-radius: var(--radius); text-align: center; cursor: pointer;
-            transition: all 0.3s ease; animation: slideIn 0.5s ease-out;
-        }
-        .nfc-scanner-area:hover { background: rgba(46, 204, 113, 0.05); transform: scale(1.02); }
-        .nfc-icon { font-size: 64px; color: var(--primary); margin-bottom: 20px; }
-        .nfc-active-pulse { animation: pulseNFC 2s infinite; }
+// ── MASTER PWD ──
+const MPWD_KEY='nfc_mpwd';
+function saveMasterPwd(){const pwd=document.getElementById('master-inp')?.value?.trim();if(!pwd||pwd.length<4){showToast('Trop court (4 min)','error-t');return;}if(!confirm('Définir ce mot de passe maître ?'))return;localStorage.setItem(MPWD_KEY,hashPass(pwd));const mi=document.getElementById('master-inp');if(mi)mi.value='';addLog('admin','Mot de passe maître défini');showToast('✓ Mot de passe maître défini !','success');}
+function clearMasterPwd(){if(!confirm('Supprimer le mot de passe maître ?'))return;localStorage.removeItem(MPWD_KEY);showToast('Mot de passe maître supprimé','');}
+function checkMasterPwd(){const saved=localStorage.getItem(MPWD_KEY);if(!saved)return true;const entered=prompt('🔒 Mot de passe maître Owner Panel :');if(!entered)return false;if(hashPass(entered)!==saved){showToast('⛔ Mot de passe maître incorrect','error-t');addLog('admin','Tentative accès owner panel échouée');return false;}return true;}
 
-        .btn { 
-            display: inline-block; padding: 15px 30px; border-radius: 50px; border: none; 
-            font-weight: bold; text-transform: uppercase; letter-spacing: 1px; cursor: pointer;
-            transition: 0.3s; text-decoration: none; text-align: center;
-        }
-        .btn-primary { background: var(--primary); color: white; box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3); }
-        .btn-primary:active { transform: scale(0.95); }
+// ── SETTINGS LOCK ──
+var cachedGlobalConfig={};
+function toggleSettingsLock(){if(!isOwner())return;const locked=cachedGlobalConfig.settingsLocked===true;fbdb.ref('globalConfig').update({settingsLocked:!locked});addLog('admin',locked?'Réglages déverrouillés':'Réglages verrouillés');showToast(locked?'✓ Réglages déverrouillés':'🔒 Réglages verrouillés','success');}
+function updateSettingsLockBtn(){const btn=document.getElementById('settings-lock-btn');if(!btn)return;const locked=cachedGlobalConfig.settingsLocked===true;btn.textContent=locked?'🔒 VERROUILLÉ — Cliquer pour déverrouiller':'🔓 DÉVERROUILLÉ — Cliquer pour verrouiller';btn.style.background=locked?'rgba(239,68,68,.1)':'rgba(34,197,94,.1)';btn.style.border='1px solid '+(locked?'#ef4444':'#22c55e');btn.style.color=locked?'#ef4444':'#22c55e';btn.style.borderRadius='var(--r)';}
 
-        .form-group { margin-bottom: 25px; animation: slideIn 0.6s ease-out; }
-        .form-label { display: block; margin-bottom: 10px; color: var(--muted); font-size: 0.9rem; }
-        .form-input { 
-            width: 100%; background: var(--card); border: 1px solid #333; padding: 15px; 
-            border-radius: var(--radius); color: white; font-size: 1rem; transition: 0.3s;
-        }
-        .form-input:focus { border-color: var(--primary); outline: none; background: #222; }
+// ── ADD FREEZE BUTTONS IN OWNER ACCOUNTS LIST ──
+var _origRenderOwnerAccounts=typeof renderOwnerAccounts==='function'?renderOwnerAccounts:null;
 
-        /* --- Grid de données --- */
-        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 20px; }
-        .stat-card { background: var(--card); padding: 15px; border-radius: var(--radius); border-left: 4px solid var(--secondary); }
-        .stat-value { font-size: 1.4rem; font-weight: bold; display: block; }
-        .stat-label { font-size: 0.8rem; color: var(--muted); }
+</script>
+<style>
+:root{
+  --bg:#09090f;--surface:#111118;--surface2:#16161f;--border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
+  --cyan:#6366f1;--cyan2:#818cf8;--green:#22c55e;--orange:#f97316;--red:#ef4444;--yellow:#eab308;
+  --text:#f1f1f5;--muted:#6b7280;--ui:'Inter',-apple-system,sans-serif;--mono:'JetBrains Mono',monospace;
+  --r:12px;--r2:16px;--r3:20px;--rF:999px;
+  --t1:150ms cubic-bezier(.4,0,.2,1);--t2:250ms cubic-bezier(.4,0,.2,1);--t3:400ms cubic-bezier(.4,0,.2,1);
+  --sh1:0 1px 3px rgba(0,0,0,.5);--sh2:0 4px 16px rgba(0,0,0,.6);--sh3:0 8px 32px rgba(0,0,0,.7);
+  --accent-glow:rgba(99,102,241,.3);
+}
+body.light{
+  --bg:#f8f8fc;--surface:#fff;--surface2:#f2f2f8;--border:rgba(0,0,0,.07);--border2:rgba(0,0,0,.13);
+  --text:#0f0f1a;--muted:#6b7280;--sh1:0 1px 3px rgba(0,0,0,.08);--sh2:0 4px 16px rgba(0,0,0,.1);--sh3:0 8px 32px rgba(0,0,0,.12);
+}
+body.oled{--bg:#000;--surface:#0a0a0a;--surface2:#111;}
 
-        /* --- Footer Nav --- */
-        nav.bottom-nav { 
-            position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); 
-            width: 100%; max-width: 600px; background: rgba(26,26,26,0.95); 
-            backdrop-filter: blur(10px); display: flex; justify-content: space-around; 
-            padding: 15px 0; border-top: 1px solid #333;
-        }
-        .nav-link { color: var(--muted); text-decoration: none; font-size: 0.7rem; text-align: center; flex: 1; }
-        .nav-link.active { color: var(--primary); }
-        .nav-link i { display: block; font-size: 1.5rem; margin-bottom: 5px; }
+body.light{
+  --bg:#f0f4f8;--surface:#ffffff;--surface2:#e8eef5;--border:#c5d5e8;
+  --cyan:#0077aa;--cyan2:#005f8a;--green:#0a7c4e;--orange:#c05300;
+  --red:#c0002e;--text:#0d2035;--muted:#6688aa;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.07) 2px,rgba(0,0,0,0.07) 4px);pointer-events:none;z-index:9999;}
+body::after{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
 
-        /* [AJOUTER ICI 400 LIGNES DE CSS POUR LES MODALES, LES GRAPHIQUES ET LES THEMES] */
-    </style>
+.container{position:relative;z-index:1;max-width:680px;margin:0 auto;padding:20px 16px 100px;}
+
+/* HEADER */
+header{text-align:center;padding:28px 0 22px;}
+.logo-badge{display:inline-block;background:var(--cyan);color:var(--bg);font-family:var(--mono);font-size:10px;font-weight:bold;letter-spacing:4px;padding:4px 12px;margin-bottom:10px;}
+header h1{font-family:var(--mono);font-size:clamp(20px,6vw,34px);color:var(--cyan);letter-spacing:2px;text-shadow:0 0 30px rgba(0,229,255,0.5);line-height:1.1;}
+header h1 span{color:var(--green);text-shadow:0 0 20px rgba(0,255,140,0.5);}
+.header-sub{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:3px;margin-top:6px;}
+.header-line{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);margin-top:20px;opacity:0.35;}
+
+/* STATUS */
+.status-bar{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--cyan);padding:10px 14px;margin-bottom:16px;font-family:var(--mono);font-size:12px;}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:all .3s;}
+.status-dot.active{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.5s infinite;}
+.status-dot.error{background:var(--red);box-shadow:0 0 8px var(--red);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#status-text{color:var(--text);flex:1;}
+
+/* SCAN BTN */
+.scan-btn{width:100%;padding:16px;background:transparent;border:2px solid var(--cyan);color:var(--cyan);font-family:var(--mono);font-size:14px;letter-spacing:4px;cursor:pointer;position:relative;overflow:hidden;transition:all .2s;margin-bottom:20px;text-transform:uppercase;}
+.scan-btn::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,229,255,0.1),transparent);transition:left .5s;}
+.scan-btn:hover::before{left:100%;}
+.scan-btn:hover{background:rgba(0,229,255,0.07);box-shadow:0 0 20px rgba(0,229,255,0.2);}
+.scan-btn.scanning{border-color:var(--green);color:var(--green);animation:scanAnim 2s infinite;}
+@keyframes scanAnim{0%,100%{box-shadow:0 0 10px rgba(0,255,140,.2)}50%{box-shadow:0 0 30px rgba(0,255,140,.5)}}
+.scan-waves{display:inline-flex;align-items:center;gap:5px;}
+.wave-ring{display:inline-block;width:5px;height:5px;border-radius:50%;background:currentColor;}
+.scanning .wave-ring:nth-child(1){animation:wave 1s 0s infinite;}
+.scanning .wave-ring:nth-child(2){animation:wave 1s .2s infinite;}
+.scanning .wave-ring:nth-child(3){animation:wave 1s .4s infinite;}
+@keyframes wave{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.3);opacity:.3}}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);padding:10px;text-align:center;}
+.stat-val{font-family:var(--mono);font-size:22px;color:var(--cyan);text-shadow:0 0 15px rgba(0,229,255,.4);}
+.stat-label{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:2px;margin-top:3px;}
+
+/* TOOLBAR */
+.toolbar{display:flex;gap:8px;margin-bottom:18px;}
+.tool-btn{flex:1;padding:9px 8px;background:transparent;border:1px solid var(--border);color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:2px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px;}
+.tool-btn:hover{border-color:var(--cyan);color:var(--cyan);}
+.tool-btn.install-btn{border-color:var(--green);color:var(--green);display:none;}
+.tool-btn.install-btn.visible{display:flex;}
+
+/* NFC NOT SUPPORTED */
+.nfc-unsupported{background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.3);border-left:3px solid var(--red);padding:12px 14px;font-family:var(--mono);font-size:11px;color:#ff8fa3;margin-bottom:16px;display:none;}
+
+/* CATEGORY TABS */
+.cat-tabs-wrap{display:flex;align-items:center;gap:8px;margin-bottom:12px;overflow:hidden;}
+.cat-tabs{display:flex;gap:6px;overflow-x:auto;flex:1;scrollbar-width:none;padding-bottom:2px;}
+.cat-tabs::-webkit-scrollbar{display:none;}
+.cat-tab{padding:5px 12px;background:transparent;border:1px solid var(--border);color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:2px;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0;}
+.cat-tab:hover{border-color:var(--cyan);color:var(--cyan);}
+.cat-tab.active{background:rgba(0,229,255,.1);border-color:var(--cyan);color:var(--cyan);}
+.cat-tab.active[data-color]{border-color:var(--tab-color,var(--cyan));color:var(--tab-color,var(--cyan));background:rgba(0,0,0,.2);}
+.cat-manage-btn{width:28px;height:28px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.cat-manage-btn:hover{border-color:var(--cyan);color:var(--cyan);}
+
+/* SEARCH */
+.search-wrap{position:relative;margin-bottom:12px;}
+.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted);}
+#search-input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:13px;padding:9px 12px 9px 34px;outline:none;transition:border-color .2s;}
+#search-input:focus{border-color:var(--cyan);}
+#search-input::placeholder{color:var(--muted);}
+
+/* SECTION TITLE */
+.section-title{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:4px;margin-bottom:10px;display:flex;align-items:center;gap:10px;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* TAG LIST */
+#tag-list{display:flex;flex-direction:column;gap:8px;}
+.tag-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--cyan2);padding:12px 14px;display:flex;align-items:center;gap:11px;transition:all .2s;animation:slideIn .3s ease;}
+@keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+.tag-card:hover{border-left-color:var(--cyan);background:var(--surface2);}
+.tag-card.highlight{animation:highlight 2s ease;}
+@keyframes highlight{0%{background:rgba(0,255,140,.15)}100%{background:var(--surface)}}
+.tag-card[data-status="lent"]{border-left-color:var(--orange);}
+.tag-card[data-status="lost"]{border-left-color:var(--red);}
+.tag-icon{width:38px;height:38px;background:rgba(0,229,255,.07);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;position:relative;}
+.tag-photo-thumb{width:38px;height:38px;object-fit:cover;flex-shrink:0;border:1px solid var(--border);}
+.tag-info{flex:1;min-width:0;}
+.tag-name-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.tag-name{font-family:var(--ui);font-weight:600;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tag-uid{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;letter-spacing:1px;}
+.tag-meta{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;}
+.tag-actions{display:flex;gap:5px;flex-shrink:0;}
+.btn-icon{width:28px;height:28px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .2s;}
+.btn-icon:hover{border-color:var(--cyan);color:var(--cyan);}
+.btn-icon.delete:hover{border-color:var(--red);color:var(--red);}
+
+/* BADGES */
+.badge{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:1px;padding:2px 6px;border:1px solid;vertical-align:middle;flex-shrink:0;}
+.badge-written{border-color:var(--green);color:var(--green);}
+.badge-unwritten{border-color:var(--border);color:var(--muted);}
+.badge-available{border-color:var(--green);color:var(--green);}
+.badge-lent{border-color:var(--orange);color:var(--orange);}
+.badge-lost{border-color:var(--red);color:var(--red);}
+.badge-cat{border-color:var(--badge-color,var(--muted));color:var(--badge-color,var(--muted));}
+
+.empty-state{text-align:center;padding:50px 20px;color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:2px;border:1px dashed var(--border);}
+.empty-icon{font-size:36px;margin-bottom:14px;opacity:.4;}
+
+/* LIGHT THEME OVERRIDES */
+body.light::before{background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);}
+body.light::after{background-image:linear-gradient(rgba(0,119,170,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(0,119,170,0.05) 1px,transparent 1px);background-size:40px 40px;}
+body.light .scan-btn::before{background:linear-gradient(90deg,transparent,rgba(0,119,170,0.1),transparent);}
+body.light header h1{text-shadow:none;}
+body.light header h1 span{text-shadow:none;}
+body.light .stat-val{text-shadow:none;}
+body.light .status-dot.active{box-shadow:0 0 6px var(--green);}
+
+/* THEME TOGGLE */
+.theme-btn{width:36px;height:36px;flex-shrink:0;padding:0;font-size:16px;}
+
+/* STATUS FILTER */
+.status-filter-row{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none;}
+.status-filter-row::-webkit-scrollbar{display:none;}
+.sf-btn{padding:5px 12px;background:transparent;border:1px solid var(--border);color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:2px;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0;}
+.sf-btn:hover{border-color:var(--cyan);color:var(--cyan);}
+.sf-btn.active{background:rgba(0,229,255,.08);border-color:var(--cyan);color:var(--cyan);}
+.sf-btn.sf-lent.active{background:rgba(255,107,53,.08);border-color:var(--orange);color:var(--orange);}
+.sf-btn.sf-lost.active{background:rgba(255,61,90,.08);border-color:var(--red);color:var(--red);}
+.sf-btn.sf-available.active{background:rgba(0,255,140,.08);border-color:var(--green);color:var(--green);}
+body.light .sf-btn.active{background:rgba(0,119,170,.08);}
+
+/* HISTORY MODAL */
+.history-list{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+.history-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);transition:background .15s;}
+.history-item:hover{background:var(--surface2);}
+.history-emoji{font-size:16px;flex-shrink:0;}
+.history-info{flex:1;min-width:0;}
+.history-name{font-family:var(--ui);font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.history-time{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;}
+.history-status{font-family:var(--mono);font-size:9px;padding:2px 6px;border:1px solid;flex-shrink:0;}
+
+/* QR MODAL */
+.qr-container{display:flex;flex-direction:column;align-items:center;gap:14px;padding:0 22px 18px;}
+.qr-box{background:white;padding:14px;border:2px solid var(--border);display:inline-flex;}
+#qr-canvas canvas,#qr-canvas img{display:block;}
+.qr-url{font-family:var(--mono);font-size:10px;color:var(--muted);word-break:break-all;text-align:center;max-width:320px;line-height:1.5;}
+.qr-hint{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;letter-spacing:1px;}
+.qr-download-btn{padding:10px 20px;background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:var(--mono);font-size:11px;letter-spacing:3px;cursor:pointer;transition:all .2s;}
+.qr-download-btn:hover{background:var(--cyan);color:var(--bg);}
+
+/* PIN MODAL */
+.pin-overlay{position:fixed;inset:0;background:rgba(6,11,16,.97);z-index:2000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(8px);}
+.pin-overlay.open{display:flex;}
+.pin-box{background:var(--surface);border:1px solid var(--cyan);box-shadow:0 0 60px rgba(0,229,255,.2);padding:32px 28px;width:100%;max-width:340px;animation:modalIn .25s ease;text-align:center;}
+.pin-lock-icon{font-size:36px;margin-bottom:12px;}
+.pin-title{font-family:var(--mono);font-size:13px;letter-spacing:3px;color:var(--cyan);margin-bottom:4px;}
+.pin-subtitle{font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:24px;letter-spacing:2px;}
+.pin-dots{display:flex;justify-content:center;gap:12px;margin-bottom:24px;}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:all .15s;}
+.pin-dot.filled{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 8px rgba(0,229,255,.5);}
+.pin-dot.error{background:var(--red);border-color:var(--red);animation:shake .3s ease;}
+.pin-dot.success{background:var(--green);border-color:var(--green);}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:240px;margin:0 auto 16px;}
+.pin-key{padding:16px;background:transparent;border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:18px;cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent;}
+.pin-key:hover,.pin-key:active{background:rgba(0,229,255,.1);border-color:var(--cyan);color:var(--cyan);}
+.pin-key.wide{grid-column:span 2;}
+.pin-key.del{font-size:14px;}
+.pin-error-msg{font-family:var(--mono);font-size:11px;color:var(--red);letter-spacing:2px;min-height:18px;margin-bottom:8px;}
+.pin-cancel-btn{font-family:var(--mono);font-size:10px;color:var(--muted);background:transparent;border:none;cursor:pointer;letter-spacing:2px;padding:8px;}
+.pin-cancel-btn:hover{color:var(--red);}
+.pin-change-btn{font-family:var(--mono);font-size:9px;color:var(--muted);background:transparent;border:none;cursor:pointer;letter-spacing:1px;padding:4px;text-decoration:underline;margin-top:4px;}
+.pin-change-btn:hover{color:var(--cyan);}
+/* Lock icon in header */
+.lock-status{font-size:14px;cursor:pointer;flex-shrink:0;opacity:.7;transition:opacity .2s;}
+.lock-status:hover{opacity:1;}
+
+/* MODAL OVERLAY */
+.modal-overlay{position:fixed;inset:0;background:rgba(6,11,16,.92);z-index:1000;display:none;align-items:flex-end;justify-content:center;padding:0;backdrop-filter:blur(4px);}
+.modal-overlay.open{display:flex;}
+@media(min-width:500px){.modal-overlay{align-items:center;padding:20px;}}
+
+.modal{background:var(--surface);border:1px solid var(--cyan);box-shadow:0 0 40px rgba(0,229,255,.15);width:100%;max-width:420px;max-height:90vh;overflow-y:auto;animation:modalIn .25s ease;scrollbar-width:thin;scrollbar-color:var(--border) transparent;border-radius:0;}
+@media(max-width:499px){.modal{max-height:92vh;border-bottom:none;border-left:none;border-right:none;}}
+.modal::-webkit-scrollbar{width:4px;}
+.modal::-webkit-scrollbar-thumb{background:var(--border);}
+@keyframes modalIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+.modal-header{padding:22px 22px 0;}
+.modal-badge{font-family:var(--mono);font-size:9px;letter-spacing:4px;color:var(--cyan);margin-bottom:5px;}
+.modal h2{font-family:var(--ui);font-weight:800;font-size:17px;margin-bottom:5px;}
+.modal-uid{font-family:var(--mono);font-size:10px;color:var(--muted);padding:7px 10px;background:var(--bg);border:1px solid var(--border);word-break:break-all;margin-bottom:18px;}
+
+.modal-section{padding:0 22px;margin-bottom:16px;}
+.modal-section-title{font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--muted);padding:8px 0 6px;border-top:1px solid var(--border);margin-bottom:10px;}
+
+.form-label{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;display:block;}
+.form-input{width:100%;background:var(--bg);border:1px solid var(--border);border-bottom:2px solid var(--cyan);color:var(--text);font-family:var(--ui);font-size:14px;padding:9px 11px;outline:none;margin-bottom:12px;transition:border-color .2s;}
+.form-input:focus{border-bottom-color:var(--green);}
+.form-textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-bottom:2px solid var(--cyan);color:var(--text);font-family:var(--ui);font-size:13px;padding:9px 11px;outline:none;resize:vertical;min-height:70px;margin-bottom:12px;transition:border-color .2s;}
+.form-textarea:focus{border-bottom-color:var(--green);}
+.form-textarea::placeholder{color:var(--muted);}
+.form-input::placeholder{color:var(--muted);}
+
+.emoji-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+.emoji-btn{width:34px;height:34px;background:var(--bg);border:1px solid var(--border);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.emoji-btn:hover,.emoji-btn.selected{border-color:var(--cyan);background:rgba(0,229,255,.1);}
+
+/* Category selector */
+.cat-select-row{display:flex;gap:6px;margin-bottom:12px;}
+.cat-select{flex:1;background:var(--bg);border:1px solid var(--border);border-bottom:2px solid var(--cyan);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;}
+.cat-select option{background:var(--bg);}
+
+/* Photo upload */
+.photo-upload-area{border:1px dashed var(--border);padding:14px;text-align:center;cursor:pointer;margin-bottom:12px;transition:border-color .2s;position:relative;}
+.photo-upload-area:hover{border-color:var(--cyan);}
+.photo-upload-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.photo-preview{width:100%;max-height:120px;object-fit:cover;display:none;margin-bottom:8px;}
+.photo-upload-label{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:2px;}
+.photo-remove-btn{font-family:var(--mono);font-size:10px;color:var(--red);cursor:pointer;border:none;background:transparent;margin-top:4px;}
+
+/* Status selector */
+.status-btns{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;}
+.status-btn{padding:9px 4px;background:transparent;border:1px solid var(--border);color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:1px;cursor:pointer;text-align:center;transition:all .15s;}
+.status-btn[data-val="available"].active{border-color:var(--green);color:var(--green);background:rgba(0,255,140,.08);}
+.status-btn[data-val="lent"].active{border-color:var(--orange);color:var(--orange);background:rgba(255,107,53,.08);}
+.status-btn[data-val="lost"].active{border-color:var(--red);color:var(--red);background:rgba(255,61,90,.08);}
+
+/* Borrower field */
+#borrower-field{display:none;}
+
+/* Write status */
+.write-status{font-family:var(--mono);font-size:11px;padding:9px;background:var(--bg);border:1px solid var(--border);margin-bottom:14px;text-align:center;display:none;}
+.write-status.visible{display:block;}
+.write-status.writing{color:var(--orange);border-color:var(--orange);animation:pulse 1s infinite;}
+.write-status.done{color:var(--green);border-color:var(--green);}
+.write-status.fail{color:var(--red);border-color:var(--red);}
+
+.modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 22px 22px;}
+.btn-primary{padding:12px;background:var(--cyan);border:none;color:var(--bg);font-family:var(--mono);font-size:11px;letter-spacing:3px;cursor:pointer;font-weight:bold;transition:all .2s;}
+.btn-primary:hover{background:var(--green);box-shadow:0 0 20px rgba(0,255,140,.3);}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
+.btn-secondary{padding:12px;background:transparent;border:1px solid var(--border);color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:3px;cursor:pointer;transition:all .2s;}
+.btn-secondary:hover{border-color:var(--red);color:var(--red);}
+
+/* Detail modal */
+.detail-status-banner{padding:12px;text-align:center;font-family:var(--mono);font-size:12px;letter-spacing:2px;margin-bottom:16px;}
+.detail-status-banner.available{background:rgba(0,255,140,.08);border:1px solid rgba(0,255,140,.3);color:var(--green);}
+.detail-status-banner.lent{background:rgba(255,107,53,.1);border:1px solid rgba(255,107,53,.4);color:var(--orange);}
+.detail-status-banner.lost{background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.4);color:var(--red);}
+.detail-photo{width:100%;max-height:140px;object-fit:cover;margin-bottom:14px;display:none;}
+.detail-notes{font-family:var(--ui);font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--border);padding:10px;margin-bottom:14px;line-height:1.5;display:none;white-space:pre-wrap;}
+.detail-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);}
+.detail-row:last-child{border-bottom:none;}
+.detail-key{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:2px;}
+.detail-val{font-family:var(--mono);font-size:11px;color:var(--text);text-align:right;word-break:break-all;max-width:60%;}
+
+/* Cat manage modal */
+.cat-list{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
+.cat-list-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);}
+.cat-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.cat-item-name{flex:1;font-family:var(--mono);font-size:12px;}
+.cat-item-del{background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;padding:3px 8px;font-size:11px;font-family:var(--mono);transition:all .15s;}
+.cat-item-del:hover{border-color:var(--red);color:var(--red);}
+.cat-add-row{display:flex;gap:6px;margin-bottom:12px;}
+.cat-add-input{flex:1;background:var(--bg);border:1px solid var(--border);border-bottom:2px solid var(--cyan);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;outline:none;}
+.color-pick-row{display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap;}
+.color-pick{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color .15s;flex-shrink:0;}
+.color-pick.selected,.color-pick:hover{border-color:white;}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface2);border:1px solid var(--cyan);color:var(--text);font-family:var(--mono);font-size:11px;letter-spacing:2px;padding:11px 18px;z-index:2000;transition:transform .3s ease;white-space:nowrap;box-shadow:0 0 20px rgba(0,229,255,.2);}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.toast.success{border-color:var(--green);}
+.toast.error-t{border-color:var(--red);}
+
+/* ── MODERN OVERRIDES ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+*{transition:background var(--t2),border-color var(--t2),color var(--t1),box-shadow var(--t2);}
+body{font-family:var(--ui);-webkit-font-smoothing:antialiased;}
+body::before,body::after{display:none!important;}
+
+/* Scan button */
+.scan-btn{border-radius:var(--r3)!important;background:linear-gradient(135deg,var(--cyan),#8b5cf6)!important;border:none!important;font-size:15px!important;font-weight:700!important;letter-spacing:.01em!important;box-shadow:0 4px 24px var(--accent-glow)!important;transition:all var(--t2)!important;}
+.scan-btn:hover{transform:translateY(-2px)!important;box-shadow:0 8px 40px var(--accent-glow)!important;}
+.scan-btn:active{transform:translateY(0)!important;}
+.scan-btn.scanning{background:linear-gradient(135deg,var(--green),#16a34a)!important;box-shadow:0 4px 24px rgba(34,197,94,.35)!important;}
+
+/* Stat cards */
+.stat-card{border-radius:var(--r2)!important;border:1px solid var(--border)!important;transition:all var(--t2)!important;}
+.stat-card:hover{transform:translateY(-3px)!important;box-shadow:var(--sh2)!important;border-color:var(--border2)!important;}
+.stat-val{font-size:30px!important;font-weight:800!important;letter-spacing:-.03em!important;background:linear-gradient(135deg,var(--cyan),#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+
+/* Tag cards */
+.tag-card{border-radius:var(--r2)!important;border:1px solid var(--border)!important;transition:all var(--t2)!important;overflow:hidden;}
+.tag-card:hover{border-color:var(--border2)!important;box-shadow:var(--sh2)!important;}
+.tag-card.clickable-card{cursor:pointer;}
+.tag-card.clickable-card:hover{transform:translateY(-2px)!important;}
+.tag-card.clickable-card:active{transform:translateY(0)!important;}
+
+/* Modals */
+.modal{border-radius:var(--r3) var(--r3) 0 0!important;border:1px solid var(--border2)!important;}
+@media(min-width:500px){.modal{border-radius:var(--r3)!important;}}
+
+/* Buttons */
+.bp{border-radius:var(--r)!important;background:linear-gradient(135deg,var(--cyan),#8b5cf6)!important;border:none!important;font-weight:700!important;transition:all var(--t2)!important;box-shadow:0 2px 12px var(--accent-glow)!important;}
+.bp:hover{transform:translateY(-1px)!important;box-shadow:0 6px 24px var(--accent-glow)!important;}
+.bp:active{transform:translateY(0)!important;}
+.bs{border-radius:var(--r)!important;font-weight:600!important;transition:all var(--t2)!important;}
+.btn-icon{border-radius:10px!important;transition:all var(--t1)!important;}
+.btn-icon:hover{transform:scale(1.05)!important;}
+
+/* Inputs */
+.fi,.fta,.cat-select,.sort-select,.mselect{border-radius:var(--r)!important;border:1.5px solid var(--border2)!important;transition:all var(--t1)!important;}
+.fi:focus,.fta:focus,.cat-select:focus,.sort-select:focus{border-color:var(--cyan)!important;box-shadow:0 0 0 3px rgba(99,102,241,.15)!important;outline:none!important;}
+#search-input{border-radius:var(--rF)!important;}
+
+/* User bar */
+.user-bar{border-radius:var(--r2)!important;border:1px solid var(--border)!important;}
+.user-avatar{border-radius:10px!important;background:linear-gradient(135deg,var(--cyan),#8b5cf6)!important;}
+
+/* Badges */
+.badge{border-radius:var(--rF)!important;}
+.badge-available{background:rgba(34,197,94,.1)!important;color:#22c55e!important;border-color:transparent!important;}
+.badge-lent{background:rgba(249,115,22,.1)!important;color:#f97316!important;border-color:transparent!important;}
+.badge-lost{background:rgba(239,68,68,.1)!important;color:#ef4444!important;border-color:transparent!important;}
+.badge-written{background:rgba(59,130,246,.1)!important;color:#3b82f6!important;border-color:transparent!important;}
+.badge-cat{background:color-mix(in srgb,var(--badge-color) 15%,transparent)!important;border-color:transparent!important;}
+
+/* Status bar */
+.status-bar{border-radius:var(--r)!important;}
+.status-dot.active{background:var(--green)!important;box-shadow:0 0 6px var(--green)!important;}
+
+/* Filter buttons */
+.sf-btn,.f-btn,.cat-tab{border-radius:var(--rF)!important;transition:all var(--t1)!important;}
+.sf-btn.active,.f-btn.active,.cat-tab.active{background:rgba(99,102,241,.12)!important;border-color:var(--cyan)!important;color:var(--cyan2)!important;}
+
+/* Dropdown */
+.tag-dropdown{border-radius:var(--r2)!important;border:1px solid var(--border2)!important;box-shadow:var(--sh3)!important;}
+.dd-item{border-radius:var(--r)!important;transition:background var(--t1)!important;}
+
+/* Toast */
+.toast{border-radius:var(--rF)!important;box-shadow:var(--sh3)!important;font-weight:600!important;}
+
+/* Loading */
+#loading-screen{background:var(--bg)!important;}
+
+/* Pin */
+.pin-box{border-radius:var(--r3)!important;}
+.pin-key{border-radius:var(--r)!important;transition:all var(--t1)!important;}
+
+/* Changelogs */
+.cl-item{border-radius:var(--r)!important;}
+
+/* QR */
+.qr-box{border-radius:var(--r2)!important;box-shadow:var(--sh2)!important;}
+
+/* Anim */
+@keyframes fadeSlideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.tag-card{animation:fadeSlideUp .25s ease both;}
+.modal{animation:fadeSlideUp .3s cubic-bezier(.34,1.56,.64,1) both;}
+
+</style>
 </head>
 <body>
-    <div class="app-wrapper">
-        <header>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h1 style="margin: 0; font-size: 1.5rem; color: var(--primary);">FOOD<span style="color: white;">SCAN</span> PRO</h1>
-                <div id="status-tag" class="status-ok">SYSTÈME ACTIF</div>
-            </div>
-        </header>
 
-        <main id="main-content" style="padding: 20px; padding-bottom: 100px;">
-            <section id="view-scan">
-                <div class="nfc-scanner-area nfc-active-pulse" id="scan-trigger">
-                    <div class="nfc-icon">📡</div>
-                    <h2>Prêt à scanner</h2>
-                    <p>Approchez un badge NFC de votre appareil pour identifier l'aliment.</p>
-                </div>
-                
-                <div id="quick-actions" style="margin-top: 30px;">
-                    <h3 class="form-label">Derniers scans</h3>
-                    <div class="stat-card" style="margin-bottom: 10px;">
-                        <span class="stat-label">Il y a 2 min</span>
-                        <strong>Pomme Gala</strong>
-                    </div>
-                </div>
-            </section>
+<div class="container">
+  <header>
+    <div class="logo-badge">NTAG 213</div>
+    <h1>NFC TAG<br><span>DATABASE</span></h1>
+    <p class="header-sub">GESTIONNAIRE DE TAGS NFC</p>
+    <div class="header-line"></div>
+  </header>
 
-            <section id="view-form" style="display: none;">
-                <button class="btn" onclick="app.showView('scan')" style="padding: 5px 0; color: var(--muted);">← Retour</button>
-                <h2 id="tag-id-display">Tag ID: #---</h2>
-                
-                <div class="form-group">
-                    <label class="form-label">Nom de l'aliment</label>
-                    <input type="text" id="food-name" class="form-input" placeholder="Ex: Riz Basmati">
-                </div>
+  <div class="nfc-unsupported" id="nfc-unsupported">⚠ WEB NFC NON SUPPORTÉ — Utilisez Chrome Android. Ajout manuel disponible.</div>
 
-                <div class="stats-grid">
-                    <div class="form-group">
-                        <label class="form-label">Calories (kcal)</label>
-                        <input type="number" id="food-cal" class="form-input" value="0">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Protéines (g)</label>
-                        <input type="number" id="food-prot" class="form-input" value="0">
-                    </div>
-                </div>
-                
-                <button class="btn btn-primary" style="width: 100%;" onclick="app.saveData()">Enregistrer les données</button>
-            </section>
-        </main>
+  <div class="status-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Prêt.</span>
+  </div>
 
-        <nav class="bottom-nav">
-            <a href="#" class="nav-link active"><i>🏠</i>Accueil</a>
-            <a href="#" class="nav-link"><i>📊</i>Stats</a>
-            <a href="#" class="nav-link"><i>History</i>Historique</a>
-            <a href="#" class="nav-link"><i>⚙️</i>Réglages</a>
-        </nav>
+  <button class="scan-btn" id="scan-btn" onclick="toggleScan()">
+    <span id="scan-label">
+      <span class="scan-waves"><span class="wave-ring"></span><span class="wave-ring"></span><span class="wave-ring"></span></span>
+      &nbsp;&nbsp;SCANNER UN TAG
+    </span>
+  </button>
+
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-val" id="stat-total">0</div><div class="stat-label">TAGS</div></div>
+    <div class="stat-card"><div class="stat-val" id="stat-lent">0</div><div class="stat-label">PRÊTÉS</div></div>
+    <div class="stat-card"><div class="stat-val" id="stat-scanned">0</div><div class="stat-label">SCANS</div></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="tool-btn install-btn" id="install-btn" onclick="installPWA()">📲 INSTALLER</button>
+    <button class="tool-btn" onclick="openHistoryModal()">📋 HISTORIQUE</button>
+    <button class="tool-btn" onclick="exportData()">⬆ EXPORT</button>
+    <button class="tool-btn" onclick="document.getElementById('import-input').click()">⬇ IMPORT</button>
+    <input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(event)">
+    <button class="tool-btn theme-btn" id="theme-btn" onclick="toggleTheme()" title="Changer le thème">🌙</button>
+    <button class="tool-btn theme-btn" id="lock-btn" onclick="requirePIN(lockApp)" title="Verrouiller / Paramètres PIN">🔓</button>
+  </div>
+
+  <div class="section-title">TAGS ENREGISTRÉS</div>
+
+  <div class="cat-tabs-wrap">
+    <div class="cat-tabs" id="cat-tabs"></div>
+    <button class="cat-manage-btn" title="Gérer les catégories" onclick="openCatModal()">⚙</button>
+  </div>
+
+  <div class="status-filter-row">
+    <button class="sf-btn active" data-sf="all" onclick="setStatusFilter('all')">TOUS</button>
+    <button class="sf-btn sf-available" data-sf="available" onclick="setStatusFilter('available')">🟢 DISPO</button>
+    <button class="sf-btn sf-lent" data-sf="lent" onclick="setStatusFilter('lent')">🟡 PRÊTÉS</button>
+    <button class="sf-btn sf-lost" data-sf="lost" onclick="setStatusFilter('lost')">🔴 PERDUS</button>
+  </div>
+
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="search-input" placeholder="Rechercher..." oninput="filterTags()"/>
+  </div>
+
+  <div id="tag-list"></div>
+</div>
+
+<!-- ═══ MODAL ENREGISTREMENT ═══════════════════════════════════════════════ -->
+<div class="modal-overlay" id="register-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-badge" id="modal-badge">NOUVEAU TAG</div>
+      <h2 id="modal-title">Enregistrer ce tag</h2>
+      <div class="modal-uid" id="modal-uid">UID: —</div>
     </div>
 
-    <script>
-        /* ==========================================================================
-           LOGIQUE DE L'APPLICATION (MODULE CORE)
-           ========================================================================== */
-        const app = {
-            data: {},
-            currentTag: null,
+    <div class="modal-section">
+      <div class="modal-section-title">IDENTIFICATION</div>
+      <label class="form-label">NOM DU TAG</label>
+      <input type="text" class="form-input" id="tag-name-input" placeholder="Ex : Câble chargeur bureau" maxlength="60"
+             onkeydown="if(event.key==='Enter') saveTag()"/>
 
-            init() {
-                document.getElementById('scan-trigger').onclick = () => this.simulateScan();
-                console.log("Application NFC Food Pro initialisée...");
-            },
+      <label class="form-label">ICÔNE</label>
+      <div class="emoji-row" id="emoji-row"></div>
 
-            showView(viewName) {
-                document.getElementById('view-scan').style.display = viewName === 'scan' ? 'block' : 'none';
-                document.getElementById('view-form').style.display = viewName === 'form' ? 'block' : 'none';
-            },
+      <label class="form-label">CATÉGORIE</label>
+      <div class="cat-select-row">
+        <select class="cat-select" id="cat-select"></select>
+      </div>
+    </div>
 
-            simulateScan() {
-                const fakeID = "NFC-" + Math.floor(Math.random() * 9999);
-                this.currentTag = fakeID;
-                document.getElementById('tag-id-display').innerText = "Badge détecté : " + fakeID;
-                this.showView('form');
-            },
+    <div class="modal-section">
+      <div class="modal-section-title">DÉTAILS</div>
+      <label class="form-label">NOTES</label>
+      <textarea class="form-textarea" id="tag-notes" placeholder="Informations supplémentaires…"></textarea>
+      <label class="form-label">PHOTO</label>
+      <div class="photo-upload-area" id="photo-upload-area">
+        <input type="file" accept="image/*" onchange="handlePhotoUpload(event)"/>
+        <img class="photo-preview" id="photo-preview" alt=""/>
+        <div class="photo-upload-label" id="photo-label">📷 APPUYER POUR AJOUTER UNE PHOTO</div>
+        <button class="photo-remove-btn" id="photo-remove" onclick="removePhoto(event)" style="display:none">✕ SUPPRIMER</button>
+      </div>
+    </div>
 
-            saveData() {
-                const entry = {
-                    name: document.getElementById('food-name').value,
-                    cal: document.getElementById('food-cal').value,
-                    prot: document.getElementById('food-prot').value,
-                    date: new Date().toISOString()
-                };
-                this.data[this.currentTag] = entry;
-                alert("Données sauvegardées pour " + entry.name);
-                this.showView('scan');
-            }
-        };
+    <div class="modal-section">
+      <div class="modal-section-title">STATUT</div>
+      <div class="status-btns">
+        <button class="status-btn active" data-val="available" onclick="selectStatus('available')">🟢 DISPO</button>
+        <button class="status-btn" data-val="lent" onclick="selectStatus('lent')">🟡 PRÊTÉ</button>
+        <button class="status-btn" data-val="lost" onclick="selectStatus('lost')">🔴 PERDU</button>
+      </div>
+      <div id="borrower-field">
+        <label class="form-label">PRÊTÉ À</label>
+        <input type="text" class="form-input" id="borrower-input" placeholder="Nom de la personne…" maxlength="40"/>
+      </div>
+    </div>
 
-        app.init();
-    </script>
-</body>
-</html>
-/* ==========================================================================
-   MODULE 2 : BASE DE DONNÉES DE RÉFÉRENCE (Lignes 800 - 2500)
-   Ce dictionnaire contient les index nutritionnels pour la recherche auto.
-   ========================================================================== */
+    <div class="modal-section" style="margin-bottom:0">
+      <div class="write-status" id="write-status"></div>
+    </div>
 
-const FOOD_LIBRARY = [
-    { id: 1, n: "Pomme Gala", c: 52, p: 0.3, l: 0.2, g: 14, cat: "Fruits" },
-    { id: 2, n: "Pomme Granny Smith", c: 58, p: 0.4, l: 0.1, g: 14, cat: "Fruits" },
-    { id: 3, n: "Banane Cavandish", c: 89, p: 1.1, l: 0.3, g: 23, cat: "Fruits" },
-    { id: 4, n: "Poulet (Blanc)", c: 165, p: 31, l: 3.6, g: 0, cat: "Viandes" },
-    { id: 5, n: "Bœuf (15% MG)", c: 250, p: 26, l: 15, g: 0, cat: "Viandes" },
-    { id: 6, n: "Riz Blanc cuit", c: 130, p: 2.7, l: 0.3, g: 28, cat: "Féculents" },
-    { id: 7, n: "Riz Complet", c: 110, p: 2.6, l: 0.9, g: 23, cat: "Féculents" },
-    { id: 8, n: "Pâtes Al Dente", c: 158, p: 5.8, l: 0.9, g: 31, cat: "Féculents" },
-    { id: 9, n: "Œuf Entier", c: 155, p: 13, l: 11, g: 1.1, cat: "Protéines" },
-    { id: 10, n: "Avocat", c: 160, p: 2, l: 15, g: 9, cat: "Légumes" },
-    { id: 11, n: "Saumon Atlantique", c: 208, p: 20, l: 13, g: 0, cat: "Poissons" },
-    { id: 12, n: "Thon en boîte", c: 116, p: 26, l: 1, g: 0, cat: "Poissons" },
-    { id: 13, n: "Brocoli vapeur", c: 34, p: 2.8, l: 0.4, g: 7, cat: "Légumes" },
-    { id: 14, n: "Épinards frais", c: 23, p: 2.9, l: 0.4, g: 3.6, cat: "Légumes" },
-    { id: 15, n: "Pain complet", c: 247, p: 9, l: 3, g: 41, cat: "Boulangerie" },
-    { id: 16, n: "Beurre doux", c: 717, p: 0.9, l: 81, g: 0.1, cat: "Matières grasses" },
-    { id: 17, n: "Huile d'Olive", c: 884, p: 0, l: 100, g: 0, cat: "Matières grasses" },
-    { id: 18, n: "Yaourt Nature", c: 59, p: 10, l: 0.4, g: 3.6, cat: "Laitage" },
-    { id: 19, n: "Amandes", c: 579, p: 21, l: 49, g: 22, cat: "Snacks" },
-    { id: 20, n: "Chocolat Noir 70%", c: 598, p: 7.8, l: 43, g: 46, cat: "Snacks" },
-    // --- [Imaginez ici 1500 lignes d'objets similaires pour gonfler le code] ---
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal()">ANNULER</button>
+      <button class="btn-primary" id="save-btn" onclick="saveTag()">SAUVEGARDER</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL DÉTAIL ═══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-badge">TAG RECONNU</div>
+      <h2 id="detail-name" style="font-size:19px;color:var(--green);margin-bottom:14px;"></h2>
+    </div>
+    <div style="padding:0 22px 0;">
+      <div class="detail-status-banner available" id="detail-status-banner"></div>
+      <img class="detail-photo" id="detail-photo" alt=""/>
+      <div class="detail-notes" id="detail-notes"></div>
+      <div id="detail-rows"></div>
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-secondary" onclick="closeDetailModal()">FERMER</button>
+      <button class="btn-primary" onclick="editFromDetail()">MODIFIER</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL CATÉGORIES ════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="cat-modal">
+  <div class="modal" style="border-color:var(--muted);">
+    <div class="modal-header">
+      <div class="modal-badge" style="color:var(--muted)">GESTION</div>
+      <h2 style="margin-bottom:16px">Catégories</h2>
+    </div>
+    <div class="modal-section">
+      <div class="cat-list" id="cat-list-ui"></div>
+      <label class="form-label">NOUVELLE CATÉGORIE</label>
+      <div class="cat-add-row">
+        <input type="text" class="cat-add-input" id="new-cat-name" placeholder="Nom…" maxlength="20"
+               onkeydown="if(event.key==='Enter') addCategory()"/>
+      </div>
+      <div class="color-pick-row" id="color-pick-row"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeCatModal()">FERMER</button>
+      <button class="btn-primary" onclick="addCategory()">AJOUTER</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL PIN ═══════════════════════════════════════════════════════════ -->
+<div class="pin-overlay" id="pin-overlay">
+  <div class="pin-box">
+    <div class="pin-lock-icon" id="pin-icon">🔒</div>
+    <div class="pin-title" id="pin-title">CODE PIN</div>
+    <div class="pin-subtitle" id="pin-subtitle">ENTREZ VOTRE PIN</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="pd0"></div>
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="pin-error-msg" id="pin-error"></div>
+    <div class="pin-grid">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key wide" onclick="pinKey('0')">0</button>
+      <button class="pin-key del" onclick="pinDel()">⌫</button>
+    </div>
+    <div><button class="pin-cancel-btn" id="pin-cancel-btn" onclick="closePIN()">ANNULER</button></div>
+    <div><button class="pin-change-btn" id="pin-change-btn" onclick="startChangePIN()" style="display:none">Changer le PIN</button></div>
+  </div>
+</div>
+
+<!-- ═══ MODAL HISTORIQUE ═══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="history-modal">
+  <div class="modal" style="border-color:var(--muted);">
+    <div class="modal-header">
+      <div class="modal-badge" style="color:var(--muted)">JOURNAL</div>
+      <h2 style="margin-bottom:16px">20 derniers scans</h2>
+    </div>
+    <div style="padding:0 22px;">
+      <div class="history-list" id="history-list"></div>
+      <div style="margin-top:12px;margin-bottom:4px;">
+        <button class="btn-secondary" style="width:100%;font-size:10px;" onclick="clearHistory()">🗑 EFFACER L'HISTORIQUE</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" style="grid-column:1/-1;" onclick="closeHistoryModal()">FERMER</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL QR CODE ══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="qr-modal">
+  <div class="modal" style="border-color:var(--cyan2);">
+    <div class="modal-header">
+      <div class="modal-badge">QR CODE DE SECOURS</div>
+      <h2 id="qr-title" style="margin-bottom:4px;font-size:16px;"></h2>
+      <div class="modal-uid" id="qr-uid" style="margin-bottom:14px;"></div>
+    </div>
+    <div class="qr-container">
+      <div class="qr-box">
+        <div id="qr-canvas"></div>
+      </div>
+      <p class="qr-hint">Scannez ce QR code si le tag NFC ne répond plus</p>
+      <p class="qr-url" id="qr-url-text"></p>
+      <button class="qr-download-btn" onclick="downloadQR()">⬇ TÉLÉCHARGER</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" style="grid-column:1/-1;" onclick="closeQRModal()">FERMER</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="return-modal">
+  <div class="modal" style="border-color:var(--orange);">
+    <div class="modal-header">
+      <div class="modal-badge" id="return-badge" style="color:var(--orange)">TAG SCANNÉ</div>
+      <h2 id="return-title" style="font-size:17px;margin-bottom:6px;"></h2>
+      <div class="detail-status-banner lent" id="return-status-banner" style="margin-bottom:16px;"></div>
+    </div>
+    <div style="padding:0 22px 6px;font-family:var(--mono);font-size:12px;color:var(--text);line-height:1.7;" id="return-msg"></div>
+    <div class="modal-actions" style="margin-top:18px;">
+      <button class="btn-secondary" onclick="closeReturnModal()">LAISSER TEL QUEL</button>
+      <button class="btn-primary" style="background:var(--green);" onclick="markAsAvailable()">✓ MARQUER DISPO</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// CONFIG & CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════
+const APP_URL = window.location.origin + window.location.pathname.replace(/\/$/,'');
+const DB_KEY = 'nfc_v4_tags';
+const CAT_KEY = 'nfc_v4_cats';
+const STATS_KEY = 'nfc_v4_stats';
+const HISTORY_KEY = 'nfc_v4_history';
+const THEME_KEY = 'nfc_v4_theme';
+const PIN_KEY = 'nfc_v4_pin';
+
+const EMOJIS = ['📦','🔌','💡','🔑','🗝️','📱','💻','🖥️','🎧','🎮','📷','🚗','🧳','🏠','📚','🗂️','🔧','🔩','💊','🎁','🛒','🎵','🏋️','🐾','🖨️','📺','🔋','⌨️','🖱️','🎒'];
+const CAT_COLORS = ['#00e5ff','#00ff8c','#ff6b35','#ff3d5a','#a78bfa','#fbbf24','#34d399','#60a5fa','#f472b6','#fb923c'];
+const STATUS_LABELS = {available:'🟢 DISPONIBLE', lent:'🟡 PRÊTÉ', lost:'🔴 PERDU'};
+
+const DEFAULT_CATS = [
+  {id:'cat_general', name:'Général', color:'#00e5ff'},
+  {id:'cat_elec', name:'Électronique', color:'#00ff8c'},
+  {id:'cat_maison', name:'Maison', color:'#fbbf24'},
+  {id:'cat_perso', name:'Personnel', color:'#a78bfa'},
 ];
 
-/* ==========================================================================
-   MODULE 3 : MOTEUR DE RECHERCHE INTELLIGENT (SEARCH ENGINE)
-   ========================================================================== */
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════════════════════════════
+function loadDB(){ try{ return JSON.parse(localStorage.getItem(DB_KEY))||{}; }catch{ return {}; } }
+function saveDB(db){ localStorage.setItem(DB_KEY,JSON.stringify(db)); }
+function loadCats(){ try{ const c=JSON.parse(localStorage.getItem(CAT_KEY)); return c&&c.length?c:DEFAULT_CATS; }catch{ return DEFAULT_CATS; } }
+function saveCats(c){ localStorage.setItem(CAT_KEY,JSON.stringify(c)); }
+function loadStats(){ try{ return JSON.parse(localStorage.getItem(STATS_KEY))||{totalScans:0}; }catch{ return {totalScans:0}; } }
+function saveStats(s){ localStorage.setItem(STATS_KEY,JSON.stringify(s)); }
+function loadHistory(){ try{ return JSON.parse(localStorage.getItem(HISTORY_KEY))||[]; }catch{ return []; } }
+function saveHistory(h){ localStorage.setItem(HISTORY_KEY,JSON.stringify(h)); }
 
-class FoodSearchEngine {
-    constructor(data) {
-        this.database = data;
-        this.history = [];
-    }
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════
+let isScanning=false, nfcReader=null;
+let currentUID=null, editUID=null, pendingWriteUID=null, detailUID=null;
+let selectedEmoji='📦', selectedStatus='available', selectedColor=CAT_COLORS[0];
+let currentPhoto=null;
+let activeFilter='all', activeStatusFilter='all';
+let deferredPrompt=null;
+let currentQRUID=null;
+// PIN state
+let pinBuffer='', pinMode='verify', pinCallback=null, pinStep=0, pinFirstEntry='';
 
-    findByName(query) {
-        if (!query) return [];
-        const cleanQuery = query.toLowerCase().trim();
-        return this.database.filter(item => 
-            item.n.toLowerCase().includes(cleanQuery) || 
-            item.cat.toLowerCase().includes(cleanQuery)
-        );
-    }
+// ═══════════════════════════════════════════════════════════════════════════
+// PWA
+// ═══════════════════════════════════════════════════════════════════════════
+function initPWA(){
+  const manifest={name:'NFC TAG DATABASE',short_name:'NFC DB',
+    start_url:window.location.pathname,display:'standalone',
+    background_color:'#060b10',theme_color:'#00e5ff',
+    description:'Gestionnaire de tags NFC NTAG 213'};
+  const blob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
+  document.getElementById('manifest-link').href=URL.createObjectURL(blob);
 
-    getDetailsById(id) {
-        return this.database.find(item => item.id === id);
-    }
-
-    calculateMacros(id, weightInGrams) {
-        const item = this.getDetailsById(id);
-        if (!item) return null;
-        const ratio = weightInGrams / 100;
-        return {
-            calories: (item.c * ratio).toFixed(2),
-            proteines: (item.p * ratio).toFixed(2),
-            lipides: (item.l * ratio).toFixed(2),
-            glucides: (item.g * ratio).toFixed(2)
-        };
-    }
-
-    // Fonction redondante pour augmenter la complexité et le volume
-    generateHealthReport(macros) {
-        let advice = "Analyse nutritionnelle : ";
-        if (macros.calories > 500) advice += "Plat riche en énergie. ";
-        if (macros.proteines > 20) advice += "Excellente source de protéines. ";
-        return advice;
-    }
+  window.addEventListener('beforeinstallprompt', e=>{
+    e.preventDefault(); deferredPrompt=e;
+    document.getElementById('install-btn').classList.add('visible');
+  });
+  window.addEventListener('appinstalled',()=>{
+    document.getElementById('install-btn').classList.remove('visible');
+    showToast('✓ App installée !','success');
+  });
 }
 
-const searchEngine = new FoodSearchEngine(FOOD_LIBRARY);
-
-/* ==========================================================================
-   MODULE 4 : GESTION DES NOTIFICATIONS UI (UI NOTIFIER)
-   ========================================================================== */
-
-const UINotifier = {
-    show(message, type = 'info') {
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
-        toast.style.cssText = `
-            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
-            background: #333; color: white; padding: 12px 25px; border-radius: 50px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3); z-index: 9999; font-size: 14px;
-            border-left: 5px solid ${type === 'success' ? '#2ecc71' : '#3498db'};
-            transition: opacity 0.5s ease;
-        `;
-        toast.innerText = message;
-        document.body.appendChild(toast);
-        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 3000);
-    }
-};
-/* ==========================================================================
-   MODULE 5 : GESTIONNAIRE D'HISTORIQUE PERSISTANT (LOCALSTORAGE ENGINE)
-   ========================================================================== */
-
-class HistoryManager {
-    constructor() {
-        this.storageKey = 'NFC_FOOD_HISTORY';
-        this.history = this.load();
-    }
-
-    load() {
-        const data = localStorage.getItem(this.storageKey);
-        return data ? JSON.parse(data) : [];
-    }
-
-    save(entry) {
-        // Ajout de métadonnées de traçabilité pour gonfler la structure
-        const enrichedEntry = {
-            ...entry,
-            id: Date.now(),
-            uuid: crypto.randomUUID(),
-            clientTimestamp: new Date().getTime(),
-            deviceInfo: navigator.userAgent.substring(0, 50)
-        };
-        
-        this.history.unshift(enrichedEntry);
-        localStorage.setItem(this.storageKey, JSON.stringify(this.history));
-        UINotifier.show("Historique mis à jour", "success");
-    }
-
-    clear() {
-        if(confirm("Voulez-vous vraiment effacer toutes les données ?")) {
-            localStorage.removeItem(this.storageKey);
-            this.history = [];
-            location.reload();
-        }
-    }
-
-    getStatsByDay(days = 7) {
-        const now = new Date();
-        return this.history.filter(item => {
-            const itemDate = new Date(item.date);
-            const diff = (now - itemDate) / (1000 * 60 * 60 * 24);
-            return diff <= days;
-        });
-    }
+async function installPWA(){
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const r=await deferredPrompt.userChoice;
+  if(r.outcome==='accepted') deferredPrompt=null;
 }
 
-/* ==========================================================================
-   MODULE 6 : MOTEUR DE CALCULS ANALYTIQUES (ANALYTICS ENGINE)
-   ========================================================================== */
-
-class AnalyticsEngine {
-    constructor(history) {
-        this.history = history;
-    }
-
-    getTotalCalories() {
-        return this.history.reduce((sum, item) => sum + parseFloat(item.cal || 0), 0);
-    }
-
-    getAverageMacros() {
-        if (this.history.length === 0) return { prot: 0, cal: 0 };
-        const total = this.history.length;
-        return {
-            prot: (this.history.reduce((sum, item) => sum + parseFloat(item.prot || 0), 0) / total).toFixed(1),
-            cal: (this.getTotalCalories() / total).toFixed(0)
-        };
-    }
-
-    // Fonction de rendu massif pour l'interface historique
-    renderHistoryUI(containerId) {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-
-        if (this.history.length === 0) {
-            container.innerHTML = `<div class="glass-card" style="text-align:center">Aucune donnée enregistrée.</div>`;
-            return;
-        }
-
-        let html = '<h3 class="form-label">Journal d\'alimentation</h3>';
-        this.history.forEach(item => {
-            const date = new Date(item.date).toLocaleDateString('fr-FR', {hour: '2-digit', minute:'2-digit'});
-            html += `
-                <div class="glass-card" style="margin-bottom: 10px; border-left: 4px solid var(--primary);">
-                    <div style="display:flex; justify-content:space-between">
-                        <strong>${item.name}</strong>
-                        <small style="color:var(--muted)">${date}</small>
-                    </div>
-                    <div class="stats-grid" style="margin-top:10px">
-                        <div class="stat-label">🔥 ${item.cal} kcal</div>
-                        <div class="stat-label">💪 ${item.prot}g Prot</div>
-                    </div>
-                </div>
-            `;
-        });
-        container.innerHTML = html;
-    }
-}
-
-// Initialisation globale
-const historyManager = new HistoryManager();
-const analytics = new AnalyticsEngine(historyManager.history);
-
-/* ==========================================================================
-   MODULE 7 : OVERRIDE DES FONCTIONS APP (CORE INTEGRATION)
-   ========================================================================== */
-
-// On améliore la fonction de sauvegarde initiale pour utiliser le nouveau moteur
-app.saveData = function() {
-    const nameInput = document.getElementById('food-name').value;
-    const calInput = document.getElementById('food-cal').value;
-    const protInput = document.getElementById('food-prot').value;
-
-    if(!nameInput) {
-        UINotifier.show("Le nom est obligatoire", "danger");
-        return;
-    }
-
-    const entry = {
-        tag: this.currentTag,
-        name: nameInput,
-        cal: calInput,
-        prot: protInput,
-        date: new Date().toISOString()
-    };
-
-    historyManager.save(entry);
-    analytics.history = historyManager.history; // Update analytics reference
-    this.showView('scan');
-    
-    // Reset du formulaire
-    document.getElementById('food-name').value = "";
-    document.getElementById('food-cal').value = "0";
-    document.getElementById('food-prot').value = "0";
-};
-
-// Extension de la navigation pour afficher l'historique
-const originalSwitch = NavigationSystem.switch;
-NavigationSystem.switch = function(page) {
-    if(page === 'history') {
-        document.getElementById('view-scan').style.display = 'none';
-        document.getElementById('view-form').style.display = 'none';
-        const historyContainer = document.getElementById('content-display');
-        historyContainer.style.display = 'block';
-        analytics.renderHistoryUI('content-display');
-    } else {
-        document.getElementById('content-display').style.display = 'none';
-        // Logique originale simplifiée pour l'exemple
-        if(page === 'home') location.reload(); 
-    }
-};
-                /* ==========================================================================
-   MODULE 8 : MOTEUR GRAPHIQUE CUSTOM (CANVAS DATA VIZ)
-   Ce module dessine des graphiques sans bibliothèques externes.
-   ========================================================================== */
-
-class ChartEngine {
-    constructor(canvasId) {
-        this.canvas = document.getElementById(canvasId);
-        if (this.canvas) {
-            this.ctx = this.canvas.getContext('2d');
-            this.setResponsiveSize();
-        }
-    }
-
-    setResponsiveSize() {
-        if (!this.canvas) return;
-        const container = this.canvas.parentElement;
-        this.canvas.width = container.clientWidth;
-        this.canvas.height = 200;
-    }
-
-    drawBarChart(data) {
-        if (!this.ctx) return;
-        const { ctx, canvas } = this;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        const padding = 40;
-        const barWidth = (canvas.width - padding * 2) / data.length - 10;
-        const maxVal = Math.max(...data.map(d => d.value), 100);
-        
-        ctx.strokeStyle = '#333';
-        ctx.beginPath();
-        ctx.moveTo(padding, canvas.height - padding);
-        ctx.lineTo(canvas.width - padding, canvas.height - padding);
-        ctx.stroke();
-
-        data.forEach((item, i) => {
-            const barHeight = (item.value / maxVal) * (canvas.height - padding * 2);
-            const x = padding + i * (barWidth + 10);
-            const y = canvas.height - padding - barHeight;
-
-            // Gradient de couleur professionnel
-            const grad = ctx.createLinearGradient(x, y, x, canvas.height - padding);
-            grad.addColorStop(0, '#2ecc71');
-            grad.addColorStop(1, '#27ae60');
-
-            ctx.fillStyle = grad;
-            ctx.fillRect(x, y, barWidth, barHeight);
-            
-            // Labels
-            ctx.fillStyle = '#888';
-            ctx.font = '10px Arial';
-            ctx.fillText(item.label, x, canvas.height - 20);
-        });
-    }
-}
-
-/* ==========================================================================
-   MODULE 9 : GÉNÉRATEUR DE RAPPORTS ET EXPORTATION (DATA EXPORT)
-   ========================================================================== */
-
-class ExportSystem {
-    constructor(history) {
-        this.history = history;
-    }
-
-    toCSV() {
-        if (this.history.length === 0) return UINotifier.show("Aucune donnée à exporter", "danger");
-
-        let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent += "ID,Nom,Calories,Proteines,Date\n";
-
-        this.history.forEach(item => {
-            const row = `${item.id},${item.name},${item.cal},${item.prot},${item.date}`;
-            csvContent += row + "\n";
-        });
-
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `Rapport_NFC_Food_${new Date().toLocaleDateString()}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        UINotifier.show("Export CSV terminé", "success");
-    }
-
-    generateSummary() {
-        // Logique complexe de synthèse textuelle (pour le volume de code)
-        const totalCal = this.history.reduce((s, i) => s + Number(i.cal), 0);
-        const count = this.history.length;
-        const report = `
-            --- RAPPORT DE CONSOMMATION ---
-            Éléments scannés : ${count}
-            Total Calories : ${totalCal} kcal
-            Moyenne/item : ${(totalCal/count || 0).toFixed(2)} kcal
-            Généré le : ${new Date().toLocaleString()}
-            -------------------------------
-        `;
-        console.log(report);
-        return report;
-    }
-}
-
-const exportSys = new ExportSystem(historyManager.history);
-
-/* ==========================================================================
-   MODULE 10 : SYSTÈME DE PRÉFÉRENCES ET CONFIGURATION (SETTINGS)
-   ========================================================================== */
-
-const SettingsManager = {
-    config: {
-        theme: 'dark',
-        unit: 'grams',
-        nfcAutoSave: true,
-        language: 'fr',
-        notifications: true
-    },
-
-    save(newConfig) {
-        this.config = { ...this.config, ...newConfig };
-        localStorage.setItem('NFC_APP_SETTINGS', JSON.stringify(this.config));
-        UINotifier.show("Paramètres enregistrés", "success");
-    },
-
-    load() {
-        const saved = localStorage.getItem('NFC_APP_SETTINGS');
-        if (saved) this.config = JSON.parse(saved);
-    }
-};
-
-// Injection de la zone graphique dans le HTML via JS pour garder l'index propre
-function injectStatsView() {
-    const container = document.getElementById('content-display');
-    container.innerHTML = `
-        <div class="glass-card">
-            <h3>Analyse Hebdomadaire</h3>
-            <canvas id="statsChart"></canvas>
-            <div style="margin-top:20px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                <button class="btn btn-primary" onclick="exportSys.toCSV()" style="font-size:12px">Exporter CSV</button>
-                <button class="btn" onclick="historyManager.clear()" style="font-size:12px; border:1px solid var(--danger); color:var(--danger)">Vider DB</button>
-            </div>
-        </div>
-    `;
-    const chart = new ChartEngine('statsChart');
-    // Données fictives pour la démo
-    chart.drawBarChart([
-        {label: 'Lun', value: 1200}, {label: 'Mar', value: 1800},
-        {label: 'Mer', value: 1500}, {label: 'Jeu', value: 2100},
-        {label: 'Ven', value: 1700}, {label: 'Sam', value: 2400}, {label: 'Dim', value: 1900}
-    ]);
-}
-                /* ==========================================================================
-   MODULE 11 : CALCULATEUR DE MÉTABOLISME BASAL (BMR ENGINE)
-   Algorithmes basés sur Harris-Benedict et Mifflin-St Jeor.
-   ========================================================================== */
-
-class NutritionScience {
-    /**
-     * Calcule le métabolisme de base (MB)
-     * @param {number} weight - Poids en kg
-     * @param {number} height - Taille en cm
-     * @param {number} age - Âge en années
-     * @param {string} gender - 'm' ou 'f'
-     */
-    static calculateBMR(weight, height, age, gender) {
-        if (gender === 'm') {
-            return 88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age);
-        } else {
-            return 447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age);
-        }
-    }
-
-    /**
-     * Calcule la dépense énergétique journalière totale (TDEE)
-     * @param {number} bmr - Métabolisme de base
-     * @param {number} activityMultiplier - Facteur d'activité (1.2 à 1.9)
-     */
-    static calculateTDEE(bmr, activityMultiplier = 1.2) {
-        return bmr * activityMultiplier;
-    }
-
-    /**
-     * Analyse le Nutri-Score (Algorithme simplifié mais robuste)
-     */
-    static evaluateNutriScore(calories, prot, lipids) {
-        let points = 0;
-        if (calories > 800) points += 10;
-        else if (calories > 500) points += 5;
-        
-        if (prot > 15) points -= 5; // Les protéines sont positives
-        
-        if (points <= 0) return { grade: 'A', color: '#2ecc71' };
-        if (points <= 5) return { grade: 'B', color: '#27ae60' };
-        if (points <= 10) return { grade: 'C', color: '#f1c40f' };
-        return { grade: 'D', color: '#e67e22' };
-    }
-}
-
-/* ==========================================================================
-   MODULE 12 : MOTEUR DE TRI ET FILTRAGE AVANCÉ (DATA SORTER)
-   ========================================================================== */
-
-class DataSorter {
-    constructor(collection) {
-        this.collection = collection;
-    }
-
-    /**
-     * Tri QuickSort personnalisé pour le volume de code
-     */
-    sortBy(property, ascending = true) {
-        return this.collection.sort((a, b) => {
-            let valA = a[property];
-            let valB = b[property];
-            
-            // Gestion des dates
-            if (property === 'date') {
-                valA = new Date(valA);
-                valB = new Date(valB);
-            }
-
-            if (valA < valB) return ascending ? -1 : 1;
-            if (valA > valB) return ascending ? 1 : -1;
-            return 0;
-        });
-    }
-
-    filterByRange(property, min, max) {
-        return this.collection.filter(item => {
-            const val = parseFloat(item[property]);
-            return val >= min && val <= max;
-        });
-    }
-}
-
-/* ==========================================================================
-   MODULE 13 : GESTIONNAIRE D'OBJECTIFS (GOAL TRACKER)
-   ========================================================================== */
-
-const GoalTracker = {
-    dailyTarget: 2000, // kcal
-    
-    getRemaining(currentHistory) {
-        const consumed = currentHistory.reduce((sum, item) => sum + Number(item.cal), 0);
-        const remaining = this.dailyTarget - consumed;
-        const percent = (consumed / this.dailyTarget) * 100;
-        
-        return {
-            consumed,
-            remaining: remaining > 0 ? remaining : 0,
-            percent: percent > 100 ? 100 : percent,
-            status: percent > 90 ? 'danger' : 'success'
-        };
-    },
-
-    renderProgressBar() {
-        const stats = this.getRemaining(historyManager.history);
-        const color = stats.status === 'danger' ? 'var(--danger)' : 'var(--primary)';
-        
-        return `
-            <div class="glass-card">
-                <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                    <span class="stat-label">Objectif : ${this.dailyTarget} kcal</span>
-                    <span class="stat-label">${Math.round(stats.percent)}%</span>
-                </div>
-                <div style="width:100%; height:10px; background:#333; border-radius:10px; overflow:hidden;">
-                    <div style="width:${stats.percent}%; height:100%; background:${color}; transition:width 1s ease;"></div>
-                </div>
-                <p style="font-size:12px; margin-top:10px; color:var(--muted)">
-                    Consommé : ${stats.consumed} kcal | Reste : ${stats.remaining} kcal
-                </p>
-            </div>
-        `;
-    }
-};
-
-/* ==========================================================================
-   MODULE 14 : SYSTÈME DE VALIDATION DE FORMULAIRE (VALIDATOR PRO)
-   ========================================================================== */
-
-class FormValidator {
-    static isNotEmpty(value) { return value.trim().length > 0; }
-    static isNumber(value) { return !isNaN(value) && value !== ""; }
-    static isPositive(value) { return parseFloat(value) >= 0; }
-
-    static validateFoodForm(data) {
-        const errors = [];
-        if (!this.isNotEmpty(data.name)) errors.push("Le nom de l'aliment est requis.");
-        if (!this.isNumber(data.cal)) errors.push("Les calories doivent être un nombre.");
-        if (!this.isPositive(data.cal)) errors.push("Les calories ne peuvent pas être négatives.");
-        return errors;
-    }
-}
-                /* ==========================================================================
-   MODULE 15 : MOTEUR HEURISTIQUE DE CONSEIL (AI ADVISOR ENGINE)
-   Analyse les habitudes pour générer des recommandations personnalisées.
-   ========================================================================== */
-
-class AIAdvisor {
-    constructor(history, goals) {
-        this.history = history;
-        this.goals = goals;
-        this.recommendations = [];
-    }
-
-    /**
-     * Analyse les tendances de consommation sur les dernières 24h
-     */
-    analyzeTrends() {
-        const today = new Date().toISOString().split('T')[0];
-        const todaysEntries = this.history.filter(i => i.date.startsWith(today));
-        
-        let totalProt = todaysEntries.reduce((s, i) => s + Number(i.prot), 0);
-        let totalCal = todaysEntries.reduce((s, i) => s + Number(i.cal), 0);
-
-        this.recommendations = [];
-
-        // Système de règles (Heuristiques)
-        if (totalCal > this.goals.dailyTarget) {
-            this.recommendations.push({
-                level: 'warning',
-                msg: "Vous avez dépassé votre objectif calorique. Privilégiez l'eau et les fibres ce soir."
-            });
-        }
-
-        if (totalProt < 50 && totalCal > 1000) {
-            this.recommendations.push({
-                level: 'info',
-                msg: "Votre apport en protéines est faible aujourd'hui. Pensez aux œufs ou aux légumineuses."
-            });
-        }
-
-        if (todaysEntries.length === 0) {
-            this.recommendations.push({
-                level: 'tip',
-                msg: "Commencez votre journée en scannant votre premier aliment !"
-            });
-        }
-
-        return this.recommendations;
-    }
-
-    renderAdvisorUI(containerId) {
-        const container = document.getElementById(containerId);
-        const tips = this.analyzeTrends();
-        
-        let html = '<h3 class="form-label">Conseils de l\'Assistant</h3>';
-        tips.forEach(tip => {
-            const icon = tip.level === 'warning' ? '⚠️' : (tip.level === 'tip' ? '💡' : 'ℹ️');
-            html += `
-                <div class="glass-card" style="border-left: 4px solid var(--info); margin-bottom:10px;">
-                    <span style="margin-right:10px">${icon}</span>
-                    <span style="font-size:13px">${tip.msg}</span>
-                </div>
-            `;
-        });
-        container.innerHTML = html;
-    }
-}
-
-/* ==========================================================================
-   MODULE 16 : SYSTÈME D'INTERNATIONALISATION (i18n ENGINE)
-   Gestion des traductions pour 5 langues (Français, Anglais, Espagnol, Allemand, Italien).
-   ========================================================================== */
-
-const I18N_DATA = {
-    fr: {
-        app_title: "FOOD SCAN PRO",
-        scan_ready: "Prêt à scanner",
-        scan_desc: "Approchez un badge NFC de votre appareil...",
-        btn_save: "Enregistrer les données",
-        nav_home: "Accueil",
-        nav_stats: "Stats",
-        nav_history: "Historique",
-        nav_settings: "Réglages",
-        err_name_req: "Le nom est obligatoire",
-        success_save: "Données sauvegardées avec succès",
-        calories: "Calories",
-        proteins: "Protéines"
-    },
-    en: {
-        app_title: "FOOD SCAN PRO",
-        scan_ready: "Ready to Scan",
-        scan_desc: "Bring an NFC tag close to your device...",
-        btn_save: "Save Data",
-        nav_home: "Home",
-        nav_stats: "Stats",
-        nav_history: "History",
-        nav_settings: "Settings",
-        err_name_req: "Name is required",
-        success_save: "Data saved successfully",
-        calories: "Calories",
-        proteins: "Proteins"
-    },
-    es: {
-        app_title: "FOOD SCAN PRO",
-        scan_ready: "Listo para escanear",
-        scan_desc: "Acerque una etiqueta NFC a su dispositivo...",
-        btn_save: "Guardar datos",
-        nav_home: "Inicio",
-        nav_stats: "Estadísticas",
-        nav_history: "Historial",
-        nav_settings: "Ajustes",
-        err_name_req: "El nombre est obligatorio",
-        success_save: "Datos guardados con éxito",
-        calories: "Calorías",
-        proteins: "Proteínas"
-    },
-    de: {
-        app_title: "FOOD SCAN PRO",
-        scan_ready: "Bereit zum Scannen",
-        scan_desc: "Halten Sie einen NFC-Tag an Ihr Gerät...",
-        btn_save: "Daten speichern",
-        nav_home: "Startseite",
-        nav_stats: "Statistiken",
-        nav_history: "Verlauf",
-        nav_settings: "Einstellungen",
-        err_name_req: "Name ist erforderlich",
-        success_save: "Daten erfolgreich gespeichert",
-        calories: "Kalorien",
-        proteins: "Proteine"
-    },
-    it: {
-        app_title: "FOOD SCAN PRO",
-        scan_ready: "Pronto alla scansione",
-        scan_desc: "Avvicina un tag NFC al tuo dispositivo...",
-        btn_save: "Salva dati",
-        nav_home: "Home",
-        nav_stats: "Statistiche",
-        nav_history: "Cronologia",
-        nav_settings: "Impostazioni",
-        err_name_req: "Il nome è obbligatorio",
-        success_save: "Dati salvati con successo",
-        calories: "Calorie",
-        proteins: "Proteine"
-    }
-    // Note : Dans un code de 10000 lignes, on ajouterait ici 20 langues et 500 clés par langue.
-};
-
-class TranslationEngine {
-    constructor() {
-        this.currentLang = localStorage.getItem('APP_LANG') || 'fr';
-    }
-
-    t(key) {
-        return I18N_DATA[this.currentLang][key] || key;
-    }
-
-    setLang(lang) {
-        if (I18N_DATA[lang]) {
-            this.currentLang = lang;
-            localStorage.setItem('APP_LANG', lang);
-            location.reload();
-        }
-    }
-}
-
-const translator = new TranslationEngine();
-const advisor = new AIAdvisor(historyManager.history, GoalTracker);
-            /* ==========================================================================
-   MODULE 17 : INTERFACE MATÉRIELLE (HARDWARE & HAPTIC ENGINE)
-   Gère les interactions physiques avec l'appareil (Vibrations, Sons).
-   ========================================================================== */
-
-class HardwareInterface {
-    constructor() {
-        this.audioCtx = null;
-        this.enabled = true;
-    }
-
-    /**
-     * Déclenche une vibration haptique (si supportée par le smartphone)
-     * @param {string} type - 'success', 'error', 'scan'
-     */
-    vibrate(type) {
-        if (!("vibrate" in navigator)) return;
-        
-        switch(type) {
-            case 'success': navigator.vibrate([50, 30, 50]); break;
-            case 'error': navigator.vibrate([100, 50, 100, 50, 100]); break;
-            case 'scan': navigator.vibrate(100); break;
-            default: navigator.vibrate(50);
-        }
-    }
-
-    /**
-     * Génère un bip sonore synthétique pour le scan
-     */
-    playBeep(frequency = 880, duration = 0.1) {
-        try {
-            if (!this.audioCtx) this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = this.audioCtx.createOscillator();
-            const gain = this.audioCtx.createGain();
-
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(frequency, this.audioCtx.currentTime);
-            gain.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + duration);
-
-            osc.connect(gain);
-            gain.connect(this.audioCtx.destination);
-
-            osc.start();
-            osc.stop(this.audioCtx.currentTime + duration);
-        } catch(e) { console.warn("Audio bloqué par le navigateur"); }
-    }
-}
-
-const hardware = new HardwareInterface();
-
-/* ==========================================================================
-   MODULE 18 : MOTEUR D'AUTO-COMPLÉTION (INSTANT SEARCH ENGINE)
-   Permet de suggérer des aliments en temps réel pendant la saisie.
-   ========================================================================== */
-
-class InstantSearch {
-    constructor(inputElement, resultContainer) {
-        this.input = document.getElementById(inputElement);
-        this.results = document.getElementById(resultContainer);
-        this.init();
-    }
-
-    init() {
-        if(!this.input) return;
-        this.input.addEventListener('input', (e) => this.onInput(e.target.value));
-        
-        // Fermeture des résultats si on clique ailleurs
-        document.addEventListener('click', (e) => {
-            if (e.target !== this.input) this.hideResults();
-        });
-    }
-
-    onInput(query) {
-        if (query.length < 2) {
-            this.hideResults();
-            return;
-        }
-
-        const matches = searchEngine.findByName(query).slice(0, 5);
-        this.renderResults(matches);
-    }
-
-    renderResults(matches) {
-        if (matches.length === 0) {
-            this.hideResults();
-            return;
-        }
-
-        this.results.innerHTML = matches.map(item => `
-            <div class="search-suggestion" onclick="instantSearch.select('${item.n}', ${item.c}, ${item.p})">
-                <span style="color:var(--primary)">•</span> ${item.n} 
-                <small style="float:right; color:var(--muted)">${item.c} kcal</small>
-            </div>
-        `).join('');
-
-        this.results.style.display = 'block';
-        this.results.style.position = 'absolute';
-        this.results.style.background = '#222';
-        this.results.style.width = '100%';
-        this.results.style.zIndex = '1000';
-        this.results.style.borderRadius = '0 0 10px 10px';
-        this.results.style.border = '1px solid #444';
-    }
-
-    select(name, cal, prot) {
-        document.getElementById('food-name').value = name;
-        document.getElementById('food-cal').value = cal;
-        document.getElementById('food-prot').value = prot;
-        this.hideResults();
-        hardware.vibrate('success');
-    }
-
-    hideResults() {
-        if(this.results) this.results.style.display = 'none';
-    }
-}
-
-/* ==========================================================================
-   MODULE 19 : GESTIONNAIRE DE PLEIN ÉCRAN ET VEILLE (SCREEN MANAGER)
-   Gère l'affichage immersif et empêche l'écran de s'éteindre.
-   ========================================================================== */
-
-const ScreenManager = {
-    async requestFullScreen() {
-        const doc = window.document.documentElement;
-        if (doc.requestFullscreen) await doc.requestFullscreen();
-        else if (doc.mozRequestFullScreen) await doc.mozRequestFullScreen();
-        else if (doc.webkitRequestFullScreen) await doc.webkitRequestFullScreen();
-    },
-
-    // Empêche la mise en veille (Wake Lock API)
-    async requestWakeLock() {
-        if ('wakeLock' in navigator) {
-            try {
-                const wakeLock = await navigator.wakeLock.request('screen');
-                console.log("Wake Lock actif : l'écran ne s'éteindra pas.");
-            } catch (err) { console.error(`${err.name}, ${err.message}`); }
-        }
-    }
-};
-
-/* ==========================================================================
-   MODULE 20 : INJECTION DES ÉLÉMENTS UI SUPPLÉMENTAIRES
-   ========================================================================== */
-
-// On ajoute dynamiquement le conteneur de recherche au HTML
-function setupSearchUI() {
-    const input = document.getElementById('food-name');
-    if (input) {
-        const wrapper = document.createElement('div');
-        wrapper.style.position = 'relative';
-        input.parentNode.insertBefore(wrapper, input);
-        wrapper.appendChild(input);
-        
-        const resDiv = document.createElement('div');
-        resDiv.id = 'search-results';
-        wrapper.appendChild(resDiv);
-    }
-}
-
-// Lancement global
-window.addEventListener('DOMContentLoaded', () => {
-    setupSearchUI();
-    window.instantSearch = new InstantSearch('food-name', 'search-results');
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded',()=>{
+  initTheme();
+  initPIN();
+  initPWA();
+  buildEmojiPicker();
+  buildColorPicker();
+  renderCatTabs();
+  renderList();
+  updateStats();
+  populateCatSelect();
+
+  if(!('NDEFReader' in window))
+    document.getElementById('nfc-unsupported').style.display='block';
+
+  const params=new URLSearchParams(window.location.search);
+  const uid=params.get('uid');
+  if(uid){
+    sessionStorage.setItem('nfc_trusted','1'); // ouvert via scan NFC = pas de PIN
+    history.replaceState({},'',window.location.pathname);
+    handleTagFromURL(uid.toUpperCase());
+  }
 });
-            /* ==========================================================================
-   MODULE 21 : SYSTÈME DE CHIFFREMENT DES DONNÉES (ENCRYPTION ENGINE)
-   Protège les données privées dans le LocalStorage via AES-GCM (Simulé).
-   ========================================================================== */
 
-class SecurityVault {
-    constructor(passphrase) {
-        this.key = passphrase;
-        this.algorithm = { name: "AES-GCM", length: 256 };
+// ═══════════════════════════════════════════════════════════════════════════
+// SCAN FROM URL
+// ═══════════════════════════════════════════════════════════════════════════
+function handleTagFromURL(uid){
+  const db=loadDB(), stats=loadStats();
+  stats.totalScans=(stats.totalScans||0)+1; saveStats(stats); updateStats();
+  if(db[uid]){
+    db[uid].lastSeen=new Date().toISOString();
+    db[uid].scanCount=(db[uid].scanCount||0)+1;
+    saveDB(db); renderList();
+    addScanToHistory(uid, db[uid]);
+    const status=db[uid].status||'available';
+    if(status==='lent'||status==='lost'){
+      setStatus('active',`⚠ Tag ${status==='lent'?'prêté':'perdu'} scanné : ${db[uid].name}`);
+      openReturnModal(uid);
+    } else {
+      setStatus('active',`✓ Tag reconnu : ${db[uid].name}`);
+      openDetailModal(uid);
     }
-
-    /**
-     * Encode les données en Base64 pour le stockage
-     */
-    async encryptData(plainText) {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(plainText);
-        // Ici on simule le sel et le vecteur d'initialisation (IV)
-        const dummyIv = btoa(Math.random().toString()).substring(0, 12);
-        const encrypted = btoa(unescape(encodeURIComponent(plainText))); 
-        return { iv: dummyIv, content: encrypted };
-    }
-
-    /**
-     * Décode les données récupérées
-     */
-    async decryptData(encryptedObj) {
-        try {
-            return decodeURIComponent(escape(atob(encryptedObj.content)));
-        } catch(e) {
-            console.error("Erreur de déchiffrement : Clé invalide.");
-            return null;
-        }
-    }
-
-    /**
-     * Hashage SHA-256 pour l'intégrité des badges NFC
-     */
-    async generateFingerprint(input) {
-        const msgUint8 = new TextEncoder().encode(input);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    }
+  } else {
+    setStatus('active',`◈ Nouveau tag : ${uid}`);
+    openRegisterModal(uid,false,false);
+  }
 }
 
-/* ==========================================================================
-   MODULE 22 : GÉNÉRATEUR DE QR CODE NATIF (CORE QR ENGINE)
-   Génère un QR Code pour partager les informations d'un aliment scanné.
-   Note : Ce module est une structure complexe de gestion de matrice.
-   ========================================================================== */
+// ═══════════════════════════════════════════════════════════════════════════
+// SCAN MANUEL
+// ═══════════════════════════════════════════════════════════════════════════
+async function toggleScan(){
+  if(!('NDEFReader' in window)){ openRegisterModal(generateFakeUID(),true,false); return; }
+  if(isScanning){ stopScan(); return; }
+  startScan();
+}
+async function startScan(){
+  try{
+    nfcReader=new NDEFReader();
+    await nfcReader.scan();
+    isScanning=true; setScanUI(true);
+    setStatus('active','⟳ En attente d\'un tag… Approchez votre téléphone.');
+    nfcReader.addEventListener('reading',({serialNumber})=>{
+      handleTagScan(serialNumber.toUpperCase());
+    });
+    nfcReader.addEventListener('readingerror',()=>setStatus('error','✕ Erreur de lecture.'));
+  }catch(e){
+    setStatus('error','✕ '+(e.message||'Permission refusée'));
+    setScanUI(false);
+  }
+}
+function stopScan(){ isScanning=false; setScanUI(false); setStatus('','Scan arrêté.'); nfcReader=null; }
 
-class QRCodeGenerator {
-    constructor(size = 256) {
-        this.size = size;
-        this.matrixSize = 21; // Version 1
+function handleTagScan(uid){
+  const db=loadDB(), stats=loadStats();
+  stats.totalScans=(stats.totalScans||0)+1; saveStats(stats); updateStats();
+  if(db[uid]){
+    db[uid].lastSeen=new Date().toISOString();
+    db[uid].scanCount=(db[uid].scanCount||0)+1;
+    saveDB(db); renderList();
+    addScanToHistory(uid, db[uid]);
+    const status=db[uid].status||'available';
+    if(status==='lent'||status==='lost'){
+      setStatus('active',`⚠ Tag ${status==='lent'?'prêté':'perdu'} scanné : ${db[uid].name}`);
+      openReturnModal(uid);
+    } else {
+      setStatus('active',`✓ Tag reconnu : ${db[uid].name}`);
+      openDetailModal(uid);
     }
-
-    /**
-     * Crée une matrice de données (Simulé pour le volume de code)
-     * Dans une version complète, ceci fait plus de 800 lignes.
-     */
-    generateMatrix(data) {
-        const matrix = [];
-        for (let i = 0; i < this.matrixSize; i++) {
-            matrix[i] = [];
-            for (let j = 0; j < this.matrixSize; j++) {
-                // Algorithme de placement des motifs de recherche (Finders)
-                if (this.isFinderPattern(i, j)) {
-                    matrix[i][j] = 1;
-                } else {
-                    matrix[i][j] = Math.random() > 0.5 ? 1 : 0;
-                }
-            }
-        }
-        return matrix;
-    }
-
-    isFinderPattern(row, col) {
-        // Logique de détection des 3 carrés de coins du QR Code
-        if (row < 7 && col < 7) return true;
-        if (row < 7 && col > this.matrixSize - 8) return true;
-        if (row > this.matrixSize - 8 && col < 7) return true;
-        return false;
-    }
-
-    renderToCanvas(data, canvasId) {
-        const canvas = document.getElementById(canvasId);
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        const matrix = this.generateMatrix(data);
-        const cellSize = this.size / this.matrixSize;
-
-        ctx.clearRect(0, 0, this.size, this.size);
-        ctx.fillStyle = "#000000";
-
-        for (let i = 0; i < this.matrixSize; i++) {
-            for (let j = 0; j < this.matrixSize; j++) {
-                if (matrix[i][j]) {
-                    ctx.fillRect(j * cellSize, i * cellSize, cellSize, cellSize);
-                }
-            }
-        }
-    }
+  } else {
+    setStatus('active',`◈ Nouveau tag : ${uid}`);
+    pendingWriteUID=uid;
+    openRegisterModal(uid,false,true);
+  }
 }
 
-/* ==========================================================================
-   MODULE 23 : GESTIONNAIRE DE PARTAGE (SHARE SYSTEM)
-   ========================================================================== */
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL REGISTER / EDIT
+// ═══════════════════════════════════════════════════════════════════════════
+function openRegisterModal(uid,manual,willWrite){
+  currentUID=uid; editUID=null; pendingWriteUID=willWrite?uid:null;
+  currentPhoto=null; selectedStatus='available'; selectedEmoji='📦';
 
-const ShareSystem = {
-    async shareFood(foodObj) {
-        const qr = new QRCodeGenerator(200);
-        const shareContainer = document.getElementById('content-display');
-        
-        shareContainer.innerHTML = `
-            <div class="glass-card" style="text-align:center">
-                <h3>Partager l'aliment</h3>
-                <canvas id="qrCanvas" width="200" height="200" style="background:white; padding:10px; border-radius:10px"></canvas>
-                <p style="font-size:12px; margin-top:15px; color:var(--muted)">Scannez ce code pour transférer les données.</p>
-                <button class="btn" onclick="app.showView('scan')">Fermer</button>
-            </div>
-        `;
-        
-        const dataString = JSON.stringify(foodObj);
-        qr.renderToCanvas(dataString, 'qrCanvas');
-        
-        // Utilisation de la Web Share API si disponible
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: 'Info Alimentaire NFC',
-                    text: `Regarde cet aliment : ${foodObj.name} (${foodObj.cal} kcal)`,
-                    url: window.location.href
-                });
-            } catch(e) { console.log("Partage annulé"); }
-        }
+  document.getElementById('modal-badge').textContent=manual?'AJOUT MANUEL':'NOUVEAU TAG DÉTECTÉ';
+  document.getElementById('modal-title').textContent='Enregistrer ce tag';
+  document.getElementById('modal-uid').textContent='UID : '+uid;
+  document.getElementById('tag-name-input').value='';
+  document.getElementById('tag-notes').value='';
+  document.getElementById('borrower-input').value='';
+  resetPhotoUI();
+  applyStatusUI('available');
+  document.querySelectorAll('.emoji-btn').forEach(b=>b.classList.toggle('selected',b.textContent==='📦'));
+  populateCatSelect();
+
+  const ws=document.getElementById('write-status');
+  if(willWrite){ ws.className='write-status visible writing'; ws.textContent='✎ Le lien sera écrit sur le tag après sauvegarde'; }
+  else { ws.className='write-status'; }
+
+  document.getElementById('save-btn').disabled=false;
+  document.getElementById('register-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('tag-name-input').focus(),100);
+}
+
+function openEditModal(uid){
+  requirePIN(()=>_openEditModal(uid));
+}
+function _openEditModal(uid){
+  const db=loadDB(), tag=db[uid]; if(!tag) return;
+  currentUID=uid; editUID=uid; pendingWriteUID=null;
+  currentPhoto=tag.photo||null; selectedStatus=tag.status||'available'; selectedEmoji=tag.emoji||'📦';
+
+  document.getElementById('modal-badge').textContent='MODIFIER';
+  document.getElementById('modal-title').textContent='Modifier ce tag';
+  document.getElementById('modal-uid').textContent='UID : '+uid;
+  document.getElementById('tag-name-input').value=tag.name;
+  document.getElementById('tag-notes').value=tag.notes||'';
+  document.getElementById('borrower-input').value=tag.borrower||'';
+  document.getElementById('write-status').className='write-status';
+  applyStatusUI(selectedStatus);
+  document.querySelectorAll('.emoji-btn').forEach(b=>b.classList.toggle('selected',b.textContent===selectedEmoji));
+  populateCatSelect(tag.category);
+
+  // Photo
+  if(currentPhoto){
+    const prev=document.getElementById('photo-preview');
+    prev.src=currentPhoto; prev.style.display='block';
+    document.getElementById('photo-label').style.display='none';
+    document.getElementById('photo-remove').style.display='block';
+  } else { resetPhotoUI(); }
+
+  document.getElementById('save-btn').disabled=false;
+  document.getElementById('register-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('tag-name-input').focus(),100);
+}
+
+function closeModal(){
+  document.getElementById('register-modal').classList.remove('open');
+  currentUID=null; editUID=null; pendingWriteUID=null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SAVE TAG
+// ═══════════════════════════════════════════════════════════════════════════
+async function saveTag(){
+  const name=document.getElementById('tag-name-input').value.trim();
+  if(!name){ flashInput('tag-name-input'); return; }
+
+  const uid=currentUID, isEdit=!!editUID;
+  const db=loadDB();
+  const catId=document.getElementById('cat-select').value;
+  const notes=document.getElementById('tag-notes').value.trim();
+  const borrower=selectedStatus==='lent'?document.getElementById('borrower-input').value.trim():'';
+
+  if(isEdit){
+    Object.assign(db[uid],{name,emoji:selectedEmoji,category:catId,notes,photo:currentPhoto,
+      status:selectedStatus,borrower,updatedAt:new Date().toISOString()});
+  } else {
+    db[uid]={name,emoji:selectedEmoji,uid,category:catId,notes,photo:currentPhoto,
+      status:selectedStatus,borrower,
+      createdAt:new Date().toISOString(),lastSeen:new Date().toISOString(),scanCount:1,written:false};
+  }
+
+  if(pendingWriteUID&&'NDEFReader' in window){
+    const tagURL = `${APP_URL}?uid=${uid}`;
+    const ws=document.getElementById('write-status');
+    ws.className='write-status visible writing'; ws.textContent='✎ Approchez le tag pour écrire le lien…';
+    document.getElementById('save-btn').disabled=true;
+    try{
+      const writer=new NDEFReader();
+      await writer.write({records:[
+        { recordType:'url', data:tagURL },
+        { recordType:'android.com:pkg', data:new TextEncoder().encode('com.android.chrome') }
+      ]});
+      db[uid].written=true; ws.className='write-status visible done';
+      ws.textContent='✓ Lien écrit sur le tag !';
+      saveDB(db); renderList(); updateStats(); renderCatTabs();
+      setTimeout(()=>{ closeModal(); showToast('✓ Tag enregistré et lien écrit !','success'); highlightCard(uid); },1200);
+    } catch(e){
+      ws.className='write-status visible fail'; ws.textContent='✕ Écriture NFC échouée — tag quand même enregistré.';
+      saveDB(db); renderList(); updateStats(); renderCatTabs();
+      document.getElementById('save-btn').disabled=false;
+      setTimeout(()=>{ closeModal(); showToast('Tag enregistré (écriture NFC échouée)',''); highlightCard(uid); },2000);
     }
-};
+  } else {
+    saveDB(db); renderList(); updateStats(); renderCatTabs();
+    closeModal(); showToast(isEdit?'✓ Tag modifié':'✓ Tag enregistré','success'); highlightCard(uid);
+  }
+}
 
-const vault = new SecurityVault("NFC_SECURE_KEY_2024");
+// ═══════════════════════════════════════════════════════════════════════════
+// DETAIL MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+function openDetailModal(uid){
+  const db=loadDB(), tag=db[uid]; if(!tag) return;
+  detailUID=uid;
+  const cats=loadCats(), cat=cats.find(c=>c.id===tag.category);
+
+  document.getElementById('detail-name').textContent=(tag.emoji||'📦')+'  '+tag.name;
+
+  const banner=document.getElementById('detail-status-banner');
+  banner.className='detail-status-banner '+(tag.status||'available');
+  banner.textContent=STATUS_LABELS[tag.status||'available']+(tag.status==='lent'&&tag.borrower?' À '+tag.borrower.toUpperCase():'');
+
+  const ph=document.getElementById('detail-photo');
+  if(tag.photo){ ph.src=tag.photo; ph.style.display='block'; } else { ph.style.display='none'; }
+
+  const notesEl=document.getElementById('detail-notes');
+  if(tag.notes){ notesEl.textContent=tag.notes; notesEl.style.display='block'; } else { notesEl.style.display='none'; }
+
+  const rows=[
+    ['UID',uid],
+    ['CATÉGORIE',cat?cat.name:'—'],
+    ['LIEN ÉCRIT',tag.written?'✓ Oui':'✕ Non'],
+    ['ENREGISTRÉ',formatDate(tag.createdAt)],
+    ['DERNIER SCAN',formatDate(tag.lastSeen)],
+    ['NB. SCANS',tag.scanCount||1],
+  ];
+  document.getElementById('detail-rows').innerHTML=rows.map(([k,v])=>
+    `<div class="detail-row"><span class="detail-key">${k}</span><span class="detail-val">${escHtml(String(v))}</span></div>`
+  ).join('');
+
+  document.getElementById('detail-modal').classList.add('open');
+}
+function closeDetailModal(){ document.getElementById('detail-modal').classList.remove('open'); detailUID=null; }
+function editFromDetail(){ const u=detailUID; closeDetailModal(); openEditModal(u); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RETURN MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+function openReturnModal(uid){
+  const db=loadDB(), tag=db[uid]; if(!tag) return;
+  detailUID=uid;
+  const isLent=tag.status==='lent';
+  document.getElementById('return-badge').textContent=isLent?'TAG PRÊTÉ SCANNÉ':'TAG PERDU SCANNÉ';
+  document.getElementById('return-badge').style.color=isLent?'var(--orange)':'var(--red)';
+  document.getElementById('return-title').textContent=(tag.emoji||'📦')+' '+tag.name;
+  const banner=document.getElementById('return-status-banner');
+  banner.className='detail-status-banner '+(tag.status);
+  banner.textContent=isLent?('🟡 PRÊTÉ À '+(tag.borrower||'—').toUpperCase()):'🔴 PERDU';
+  document.getElementById('return-msg').innerHTML=
+    isLent
+      ? `L'objet <strong>${escHtml(tag.name)}</strong> était prêté${tag.borrower?' à <strong>'+escHtml(tag.borrower)+'</strong>':''}.<br>Il vient d'être scanné — veux-tu le marquer comme disponible ?`
+      : `L'objet <strong>${escHtml(tag.name)}</strong> était marqué perdu.<br>Il vient d'être retrouvé et scanné — veux-tu le marquer comme disponible ?`;
+  document.getElementById('return-modal').classList.add('open');
+}
+function closeReturnModal(){
+  document.getElementById('return-modal').classList.remove('open');
+  openDetailModal(detailUID);
+}
+function markAsAvailable(){
+  const db=loadDB(), uid=detailUID; if(!db[uid]) return;
+  db[uid].status='available'; db[uid].borrower=''; db[uid].returnedAt=new Date().toISOString();
+  saveDB(db); renderList(); updateStats();
+  document.getElementById('return-modal').classList.remove('open');
+  setStatus('active',`✓ ${db[uid].name} marqué comme disponible`);
+  showToast('✓ Objet remis en disponible','success');
+  highlightCard(uid);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DELETE
+// ═══════════════════════════════════════════════════════════════════════════
+function deleteTag(uid){
+  requirePIN(()=>_deleteTag(uid));
+}
+function _deleteTag(uid){
+  const db=loadDB(), name=db[uid]?.name||uid;
+  if(!confirm(`Supprimer "${name}" ?`)) return;
+  delete db[uid]; saveDB(db); renderList(); updateStats(); renderCatTabs();
+  showToast('🗑 Tag supprimé','error-t');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXPORT / IMPORT
+// ═══════════════════════════════════════════════════════════════════════════
+function exportData(){
+  requirePIN(()=>{
+    const data={tags:loadDB(), categories:loadCats(), stats:loadStats(), exportedAt:new Date().toISOString()};
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=`nfc-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+    showToast('✓ Sauvegarde exportée','success');
+  });
+}
+
+function importData(e){
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(!data.tags) throw new Error('Format invalide');
+      if(!confirm(`Importer ${Object.keys(data.tags).length} tags ? Cela fusionnera avec vos données existantes.`)) return;
+      const db=loadDB();
+      Object.assign(db, data.tags); saveDB(db);
+      if(data.categories) saveCats(data.categories);
+      renderList(); updateStats(); renderCatTabs(); populateCatSelect();
+      showToast('✓ Import réussi','success');
+    }catch(err){ showToast('✕ Fichier invalide','error-t'); }
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CATEGORIES
+// ═══════════════════════════════════════════════════════════════════════════
+function renderCatTabs(){
+  const db=loadDB(), cats=loadCats();
+  const usedCatIds=new Set(Object.values(db).map(t=>t.category).filter(Boolean));
+  const tabs=document.getElementById('cat-tabs');
+
+  const all=document.createElement('button');
+  all.className='cat-tab'+(activeFilter==='all'?' active':'');
+  all.textContent='TOUS';
+  all.onclick=()=>{ activeFilter='all'; renderCatTabs(); filterTags(); };
+  tabs.innerHTML=''; tabs.appendChild(all);
+
+  cats.filter(c=>usedCatIds.has(c.id)).forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='cat-tab'+(activeFilter===c.id?' active':'');
+    btn.style.setProperty('--tab-color',c.color);
+    btn.dataset.color=c.color; btn.textContent=c.name.toUpperCase();
+    btn.onclick=()=>{ activeFilter=c.id; renderCatTabs(); filterTags(); };
+    tabs.appendChild(btn);
+  });
+}
+
+function populateCatSelect(selected=''){
+  const cats=loadCats(), sel=document.getElementById('cat-select');
+  sel.innerHTML=cats.map(c=>`<option value="${c.id}"${c.id===selected?' selected':''}>${c.name}</option>`).join('');
+}
+
+function openCatModal(){
+  requirePIN(()=>{
+    renderCatListUI();
+    document.getElementById('new-cat-name').value='';
+    document.getElementById('cat-modal').classList.add('open');
+  });
+}
+function closeCatModal(){ document.getElementById('cat-modal').classList.remove('open'); }
+
+function renderCatListUI(){
+  const cats=loadCats();
+  document.getElementById('cat-list-ui').innerHTML=cats.map(c=>`
+    <div class="cat-list-item">
+      <div class="cat-dot" style="background:${c.color}"></div>
+      <span class="cat-item-name">${escHtml(c.name)}</span>
+      <button class="cat-item-del" onclick="deleteCat('${c.id}')">✕</button>
+    </div>`).join('');
+}
+
+function addCategory(){
+  const name=document.getElementById('new-cat-name').value.trim();
+  if(!name) return;
+  const cats=loadCats();
+  if(cats.find(c=>c.name.toLowerCase()===name.toLowerCase())){ showToast('Catégorie déjà existante','error-t'); return; }
+  cats.push({id:'cat_'+Date.now(), name, color:selectedColor});
+  saveCats(cats); renderCatListUI(); renderCatTabs(); populateCatSelect();
+  document.getElementById('new-cat-name').value='';
+  showToast('✓ Catégorie ajoutée','success');
+}
+
+function deleteCat(id){
+  const cats=loadCats().filter(c=>c.id!==id);
+  saveCats(cats); renderCatListUI(); renderCatTabs();
+}
+
+function buildColorPicker(){
+  const row=document.getElementById('color-pick-row');
+  CAT_COLORS.forEach((c,i)=>{
+    const d=document.createElement('div');
+    d.className='color-pick'+(i===0?' selected':'');
+    d.style.background=c;
+    d.onclick=()=>{
+      selectedColor=c;
+      document.querySelectorAll('.color-pick').forEach(el=>el.classList.toggle('selected',el.style.background===c||el.style.backgroundColor===c));
+    };
+    row.appendChild(d);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHOTO
+// ═══════════════════════════════════════════════════════════════════════════
+async function handlePhotoUpload(e){
+  const file=e.target.files[0]; if(!file) return;
+  currentPhoto=await compressPhoto(file);
+  const prev=document.getElementById('photo-preview');
+  prev.src=currentPhoto; prev.style.display='block';
+  document.getElementById('photo-label').style.display='none';
+  document.getElementById('photo-remove').style.display='block';
+}
+
+function removePhoto(e){
+  e.stopPropagation(); e.preventDefault();
+  currentPhoto=null; resetPhotoUI();
+}
+
+function resetPhotoUI(){
+  const prev=document.getElementById('photo-preview');
+  prev.src=''; prev.style.display='none';
+  document.getElementById('photo-label').style.display='block';
+  document.getElementById('photo-remove').style.display='none';
+}
+
+async function compressPhoto(file){
+  return new Promise(res=>{
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const img=new Image();
+      img.onload=()=>{
+        const MAX=480; let w=img.width, h=img.height;
+        if(w>h&&w>MAX){h=h*MAX/w;w=MAX;} else if(h>MAX){w=w*MAX/h;h=MAX;}
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        res(canvas.toDataURL('image/jpeg',0.65));
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STATUS
+// ═══════════════════════════════════════════════════════════════════════════
+function selectStatus(val){
+  selectedStatus=val; applyStatusUI(val);
+}
+function applyStatusUI(val){
+  document.querySelectorAll('.status-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===val));
+  document.getElementById('borrower-field').style.display=val==='lent'?'block':'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDER LIST
+// ═══════════════════════════════════════════════════════════════════════════
+function renderList(filter=''){
+  const db=loadDB(), cats=loadCats();
+  const list=document.getElementById('tag-list');
+  let keys=Object.keys(db);
+
+  if(activeFilter!=='all') keys=keys.filter(uid=>db[uid].category===activeFilter);
+  if(activeStatusFilter!=='all') keys=keys.filter(uid=>(db[uid].status||'available')===activeStatusFilter);
+  if(filter) keys=keys.filter(uid=>db[uid].name.toLowerCase().includes(filter.toLowerCase())||uid.toLowerCase().includes(filter.toLowerCase()));
+
+  if(keys.length===0){
+    list.innerHTML=`<div class="empty-state"><div class="empty-icon">📡</div>AUCUN TAG${activeFilter!=='all'?' DANS CETTE CATÉGORIE':' ENREGISTRÉ'}<br><br>Scannez un tag pour commencer.</div>`;
+    return;
+  }
+
+  keys.sort((a,b)=>new Date(db[b].createdAt)-new Date(db[a].createdAt));
+  list.innerHTML=keys.map(uid=>{
+    const t=db[uid], cat=cats.find(c=>c.id===t.category);
+    const statusBadge=t.status==='lent'
+      ?`<span class="badge badge-lent">PRÊTÉ${t.borrower?' À '+escHtml(t.borrower):''}</span>`
+      :t.status==='lost'?`<span class="badge badge-lost">PERDU</span>`
+      :`<span class="badge badge-available">DISPO</span>`;
+    const catBadge=cat?`<span class="badge badge-cat" style="--badge-color:${cat.color}">${escHtml(cat.name)}</span>`:'';
+    const writeBadge=t.written?`<span class="badge badge-written">LIEN ✓</span>`:  `<span class="badge badge-unwritten">SANS LIEN</span>`;
+    const imgEl=t.photo?`<img class="tag-photo-thumb" src="${t.photo}" alt=""/>`:
+      `<div class="tag-icon">${t.emoji||'📦'}</div>`;
+
+    return `<div class="tag-card" data-uid="${uid}" data-status="${t.status||'available'}">
+      ${imgEl}
+      <div class="tag-info">
+        <div class="tag-name-row">
+          <span class="tag-name">${escHtml(t.name)}</span>
+          ${statusBadge}
+        </div>
+        <div class="tag-uid">${uid}</div>
+        <div class="tag-meta">${catBadge} ${writeBadge}</div>
+      </div>
+      <div class="tag-actions">
+        <button class="btn-icon" title="Voir" onclick="openDetailModal('${uid}')">👁</button>
+        <button class="btn-icon" title="QR Code" onclick="openQRModal('${uid}')">⬛</button>
+        <button class="btn-icon" title="Modifier" onclick="openEditModal('${uid}')">✏️</button>
+        <button class="btn-icon delete" title="Supprimer" onclick="deleteTag('${uid}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterTags(){ renderList(document.getElementById('search-input').value); }
+
+function updateStats(){
+  const db=loadDB(), keys=Object.keys(db);
+  const lent=keys.filter(u=>db[u].status==='lent').length;
+  document.getElementById('stat-total').textContent=keys.length;
+  document.getElementById('stat-lent').textContent=lent;
+  document.getElementById('stat-scanned').textContent=loadStats().totalScans||0;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+function setScanUI(active){
+  const btn=document.getElementById('scan-btn'), label=document.getElementById('scan-label');
+  const waves=`<span class="scan-waves"><span class="wave-ring"></span><span class="wave-ring"></span><span class="wave-ring"></span></span>`;
+  btn.classList.toggle('scanning',active);
+  label.innerHTML=waves+(active?'&nbsp;&nbsp;APPROCHEZ UN TAG':'&nbsp;&nbsp;SCANNER UN TAG');
+}
+function setStatus(type,msg){
+  document.getElementById('status-dot').className='status-dot'+(type?' '+type:'');
+  document.getElementById('status-text').textContent=msg;
+}
+let toastTimer;
+function showToast(msg,type=''){
+  const t=document.getElementById('toast'); t.textContent=msg; t.className='toast show '+type;
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.className='toast',3000);
+}
+function highlightCard(uid){
+  setTimeout(()=>{ const c=document.querySelector(`[data-uid="${uid}"]`); if(c){c.classList.add('highlight');setTimeout(()=>c.classList.remove('highlight'),2000);}},100);
+}
+function flashInput(id){ const el=document.getElementById(id); el.style.borderBottomColor='var(--red)'; setTimeout(()=>el.style.borderBottomColor='',1000); }
+function formatDate(iso){ if(!iso) return '—'; const d=new Date(iso); return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function generateFakeUID(){ return Array.from({length:7},()=>Math.floor(Math.random()*256).toString(16).padStart(2,'0').toUpperCase()).join(':'); }
+
+function buildEmojiPicker(){
+  const row=document.getElementById('emoji-row');
+  EMOJIS.forEach(e=>{
+    const btn=document.createElement('button'); btn.className='emoji-btn'; btn.textContent=e;
+    btn.onclick=()=>{ selectedEmoji=e; document.querySelectorAll('.emoji-btn').forEach(b=>b.classList.toggle('selected',b.textContent===e)); };
+    row.appendChild(btn);
+  });
+}
+
+// Close on overlay click
+['register-modal','detail-modal','cat-modal','return-modal','history-modal','qr-modal'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',e=>{ if(e.target===e.currentTarget) document.getElementById(id).classList.remove('open'); });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PIN SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+function hashPIN(pin){ // simple hash - not cryptographic but fine for local use
+  let h=0; for(let i=0;i<pin.length;i++){h=((h<<5)-h)+pin.charCodeAt(i);h|=0;}
+  return h.toString(36);
+}
+function getSavedPIN(){ return localStorage.getItem(PIN_KEY); }
+
+function initPIN(){
+  updateLockBtn();
+  // If no PIN set yet, prompt to create one on first action (not on load)
+}
+
+function updateLockBtn(){
+  const btn=document.getElementById('lock-btn');
+  const pinSet=!!getSavedPIN();
+  btn.textContent=pinSet?'🔒':'🔓';
+  btn.title=pinSet?'Paramètres PIN':'Définir un PIN';
+}
+
+function lockApp(){
+  // Called from lock button after PIN verified — offer change PIN or remove
+  const choice=confirm('Changer votre PIN ?\n\nOK = Changer le PIN\nAnnuler = Supprimer le PIN');
+  if(choice) startChangePIN();
+  else if(confirm('Supprimer le PIN ? N\'importe qui pourra modifier vos tags.'))
+    { localStorage.removeItem(PIN_KEY); updateLockBtn(); showToast('PIN supprimé',''); }
+}
+
+// Main entry point: call before any protected action
+function requirePIN(callback){
+  if(sessionStorage.getItem('nfc_trusted')==='1'){
+    if(callback) callback(); return;
+  }
+  const saved=getSavedPIN();
+  if(!saved) startSetPIN(callback);
+  else openPINVerify(callback);
+}
+
+function openPINVerify(callback){
+  pinMode='verify'; pinCallback=callback; pinBuffer='';
+  document.getElementById('pin-icon').textContent='🔒';
+  document.getElementById('pin-title').textContent='CODE PIN';
+  document.getElementById('pin-subtitle').textContent='ENTREZ VOTRE PIN POUR CONTINUER';
+  document.getElementById('pin-cancel-btn').style.display='inline-block';
+  document.getElementById('pin-change-btn').style.display='inline-block';
+  document.getElementById('pin-error').textContent='';
+  updatePINDots('');
+  document.getElementById('pin-overlay').classList.add('open');
+}
+
+function startSetPIN(callback){
+  pinMode='set'; pinStep=0; pinFirstEntry=''; pinBuffer=''; pinCallback=callback;
+  document.getElementById('pin-icon').textContent='🔐';
+  document.getElementById('pin-title').textContent='CRÉER UN PIN';
+  document.getElementById('pin-subtitle').textContent='CHOISISSEZ UN CODE À 4 CHIFFRES';
+  document.getElementById('pin-cancel-btn').style.display='inline-block';
+  document.getElementById('pin-change-btn').style.display='none';
+  document.getElementById('pin-error').textContent='';
+  updatePINDots('');
+  document.getElementById('pin-overlay').classList.add('open');
+}
+
+function startChangePIN(){
+  closePIN();
+  setTimeout(()=>startSetPIN(null), 100);
+}
+
+function closePIN(){
+  document.getElementById('pin-overlay').classList.remove('open');
+  pinBuffer=''; pinCallback=null; pinStep=0; pinFirstEntry='';
+  updatePINDots('');
+  document.getElementById('pin-error').textContent='';
+}
+
+function pinKey(digit){
+  if(pinBuffer.length>=4) return;
+  pinBuffer+=digit;
+  updatePINDots(pinBuffer);
+  if(pinBuffer.length===4) setTimeout(()=>processPIN(), 120);
+}
+
+function pinDel(){
+  if(pinBuffer.length===0) return;
+  pinBuffer=pinBuffer.slice(0,-1);
+  updatePINDots(pinBuffer);
+  document.getElementById('pin-error').textContent='';
+}
+
+function updatePINDots(buf){
+  for(let i=0;i<4;i++){
+    const d=document.getElementById('pd'+i);
+    d.className='pin-dot'+(i<buf.length?' filled':'');
+  }
+}
+
+function processPIN(){
+  if(pinMode==='verify'){
+    const saved=getSavedPIN();
+    if(hashPIN(pinBuffer)===saved){
+      // Success
+      dotsSuccess();
+      setTimeout(()=>{
+        closePIN();
+        if(pinCallback) pinCallback();
+      },300);
+    } else {
+      dotsError();
+      document.getElementById('pin-error').textContent='PIN INCORRECT';
+      pinBuffer='';
+      setTimeout(()=>updatePINDots(''),500);
+    }
+  } else if(pinMode==='set'){
+    if(pinStep===0){
+      pinFirstEntry=pinBuffer; pinBuffer='';
+      pinStep=1;
+      document.getElementById('pin-subtitle').textContent='CONFIRMEZ VOTRE PIN';
+      document.getElementById('pin-error').textContent='';
+      updatePINDots('');
+    } else {
+      if(pinBuffer===pinFirstEntry){
+        localStorage.setItem(PIN_KEY, hashPIN(pinBuffer));
+        updateLockBtn();
+        dotsSuccess();
+        document.getElementById('pin-error').textContent='';
+        setTimeout(()=>{
+          closePIN();
+          showToast('✓ PIN défini','success');
+          if(pinCallback) pinCallback();
+        },400);
+      } else {
+        dotsError();
+        document.getElementById('pin-error').textContent='LES PINS NE CORRESPONDENT PAS';
+        pinBuffer=''; pinStep=0; pinFirstEntry='';
+        document.getElementById('pin-subtitle').textContent='RÉESSAYEZ — CHOISISSEZ UN CODE À 4 CHIFFRES';
+        setTimeout(()=>updatePINDots(''),500);
+      }
+    }
+  }
+}
+
+function dotsError(){
+  for(let i=0;i<4;i++) document.getElementById('pd'+i).className='pin-dot error';
+}
+function dotsSuccess(){
+  for(let i=0;i<4;i++) document.getElementById('pd'+i).className='pin-dot success';
+}
+
+// Keyboard support for PIN
+document.addEventListener('keydown', e=>{
+  if(!document.getElementById('pin-overlay').classList.contains('open')) return;
+  if(e.key>='0'&&e.key<='9') pinKey(e.key);
+  else if(e.key==='Backspace') pinDel();
+  else if(e.key==='Escape') closePIN();
+});
+
+function initTheme(){
+  const saved=localStorage.getItem(THEME_KEY)||'dark';
+  if(saved==='light') applyTheme('light');
+  else applyTheme('dark');
+}
+function toggleTheme(){
+  const isLight=document.body.classList.contains('light');
+  applyTheme(isLight?'dark':'light');
+  localStorage.setItem(THEME_KEY, isLight?'dark':'light');
+}
+function applyTheme(t){
+  document.body.classList.toggle('light', t==='light');
+  document.getElementById('theme-btn').textContent=t==='light'?'🌙':'☀️';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STATUS FILTER
+// ═══════════════════════════════════════════════════════════════════════════
+function setStatusFilter(val){
+  activeStatusFilter=val;
+  document.querySelectorAll('.sf-btn').forEach(b=>b.classList.toggle('active',b.dataset.sf===val));
+  filterTags();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HISTORY
+// ═══════════════════════════════════════════════════════════════════════════
+function addScanToHistory(uid, tag){
+  const h=loadHistory();
+  h.unshift({uid, name:tag.name, emoji:tag.emoji||'📦', status:tag.status||'available', scannedAt:new Date().toISOString()});
+  if(h.length>20) h.splice(20);
+  saveHistory(h);
+}
+function openHistoryModal(){
+  const h=loadHistory(), db=loadDB();
+  const list=document.getElementById('history-list');
+  if(h.length===0){
+    list.innerHTML=`<div class="empty-state" style="padding:30px"><div class="empty-icon">📋</div>AUCUN SCAN ENREGISTRÉ</div>`;
+  } else {
+    const statusColors={available:'var(--green)',lent:'var(--orange)',lost:'var(--red)'};
+    const statusLabels={available:'DISPO',lent:'PRÊTÉ',lost:'PERDU'};
+    list.innerHTML=h.map(e=>`
+      <div class="history-item" onclick="closeHistoryModal();openDetailModal('${e.uid}')" style="cursor:pointer">
+        <span class="history-emoji">${e.emoji}</span>
+        <div class="history-info">
+          <div class="history-name">${escHtml(e.name)}</div>
+          <div class="history-time">${formatDate(e.scannedAt)}</div>
+        </div>
+        <span class="history-status" style="border-color:${statusColors[e.status]||'var(--muted)'};color:${statusColors[e.status]||'var(--muted)'}">
+          ${statusLabels[e.status]||'—'}
+        </span>
+      </div>`).join('');
+  }
+  document.getElementById('history-modal').classList.add('open');
+}
+function closeHistoryModal(){ document.getElementById('history-modal').classList.remove('open'); }
+function clearHistory(){ if(!confirm('Effacer tout l\'historique ?')) return; saveHistory([]); closeHistoryModal(); showToast('Historique effacé',''); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// QR CODE
+// ═══════════════════════════════════════════════════════════════════════════
+function openQRModal(uid){
+  const db=loadDB(), tag=db[uid]; if(!tag) return;
+  currentQRUID=uid;
+  document.getElementById('qr-title').textContent=(tag.emoji||'📦')+' '+tag.name;
+  document.getElementById('qr-uid').textContent='UID : '+uid;
+  const url=`${APP_URL}?uid=${uid}`;
+  document.getElementById('qr-url-text').textContent=url;
+  const canvas=document.getElementById('qr-canvas');
+  canvas.innerHTML='';
+  new QRCode(canvas,{text:url,width:180,height:180,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+  document.getElementById('qr-modal').classList.add('open');
+}
+function closeQRModal(){ document.getElementById('qr-modal').classList.remove('open'); currentQRUID=null; }
+function downloadQR(){
+  const canvas=document.querySelector('#qr-canvas canvas');
+  if(!canvas){ showToast('QR non disponible','error-t'); return; }
+  const db=loadDB(), tag=currentQRUID?db[currentQRUID]:null;
+  const name=(tag?.name||'tag').replace(/[^a-z0-9]/gi,'-').toLowerCase();
+  const a=document.createElement('a'); a.download=`qr-nfc-${name}.png`; a.href=canvas.toDataURL('image/png'); a.click();
+  showToast('✓ QR Code téléchargé','success');
+}
+</script>
+</body>
+</html>
